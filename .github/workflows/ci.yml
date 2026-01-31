@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run linter
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Run type checker
+        run: uv run pyright
+
+      - name: Run automated tests
+        run: uv run pytest tests/ -v
+
+      - name: Start server
+        run: |
+          APP_PORT=8080 APP_BASE_URL=http://localhost:8080 uv run uvicorn main:app --host 0.0.0.0 --port 8080 &
+          sleep 3
+
+      - name: "Test 1: Health Check"
+        run: |
+          RESPONSE=$(curl -s http://localhost:8080/)
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q '"status":"running"'
+
+      - name: "Test 2: Create Payment Link"
+        run: |
+          RESPONSE=$(curl -s "http://localhost:8080/create-payment-link?amount=0.05")
+          echo "$RESPONSE"
+          PAYMENT_ID=$(echo "$RESPONSE" | jq -r '.payment_id')
+          echo "PAYMENT_ID=$PAYMENT_ID" >> $GITHUB_ENV
+          echo "$RESPONSE" | jq -e '.payment_id' > /dev/null
+          echo "$RESPONSE" | jq -e '.payment_url' > /dev/null
+          echo "$RESPONSE" | jq -e '.amount' > /dev/null
+
+      - name: "Test 2b: Verify Database Record"
+        run: |
+          uv run python -c "
+          import sqlite3
+          conn = sqlite3.connect('payments.db')
+          conn.row_factory = sqlite3.Row
+          cur = conn.cursor()
+          cur.execute('SELECT payment_id, amount, status, tx_hash FROM payments WHERE payment_id=?', ('${{ env.PAYMENT_ID }}',))
+          row = cur.fetchone()
+          assert row is not None, 'Record not found in database'
+          assert row['amount'] == 0.05, f'Amount mismatch: {row[\"amount\"]}'
+          assert row['status'] == 'pending', f'Status mismatch: {row[\"status\"]}'
+          assert row['tx_hash'] is None, f'tx_hash should be None: {row[\"tx_hash\"]}'
+          print('Database record verified successfully')
+          print(f'  payment_id: {row[\"payment_id\"]}')
+          print(f'  amount: {row[\"amount\"]}')
+          print(f'  status: {row[\"status\"]}')
+          print(f'  tx_hash: {row[\"tx_hash\"]}')
+          conn.close()
+          "
+
+      - name: "Test 3: Invalid Amount"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/create-payment-link?amount=-5")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 422 ]
+
+      - name: "Test 4: Missing Amount"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/create-payment-link")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 422 ]
+
+      - name: "Test 5: Check Payment Status (Pending)"
+        run: |
+          RESPONSE=$(curl -s "http://localhost:8080/status/${{ env.PAYMENT_ID }}")
+          echo "$RESPONSE"
+          echo "$RESPONSE" | jq -e '.status == "pending"' > /dev/null
+          echo "$RESPONSE" | jq -e '.tx == null' > /dev/null
+
+      - name: "Test 6: Status Not Found"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/status/nonexistent-id")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 404 ]
+
+      - name: "Test 7: Payment Endpoint (No Header) - Returns 402"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/pay/${{ env.PAYMENT_ID }}")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 402 ]
+
+      - name: "Test 8: Payment Not Found"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/pay/nonexistent-id")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 404 ]
+
+      - name: "Test 9: Browser Request Returns HTML"
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Accept: text/html" \
+            -H "User-Agent: Mozilla/5.0" \
+            "http://localhost:8080/pay/${{ env.PAYMENT_ID }}")
+          echo "HTTP Status: $HTTP_CODE"
+          [ "$HTTP_CODE" -eq 400 ]
+
+      - name: Stop server
+        if: always()
+        run: pkill -f "uvicorn main:app" || true
