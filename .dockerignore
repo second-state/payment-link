@@ -1,0 +1,35 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Testing
+.pytest_cache/
+tests/
+
+# IDE
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Database files (will be mounted as volume)
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment (use docker env vars instead)
+.env
+
+# Documentation
+*.md
+!README.md
+
+# Ruff cache
+.ruff_cache/

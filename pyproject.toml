@@ -1,0 +1,44 @@
+[project]
+name = "payment-link"
+version = "0.1.0"
+description = "A payment link service with x402 protection"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "python-dotenv>=1.0.0",
+    "aiosqlite>=0.20.0",
+    "x402-payment-service",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-anyio>=0.0.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+
+[tool.uv.sources]
+x402-payment-service = { git = "https://github.com/second-state/x402-payment-service.git" }
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
+    "pytest-anyio>=0.0.0",
+    "ruff>=0.14.14",
+]
