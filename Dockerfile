@@ -18,14 +18,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy application code
 COPY main.py config.py database.py ./
 
-# Create directory for database
-RUN mkdir -p /data
-
-# Set environment variables
-ENV DATABASE_PATH=/data/payments.db
-ENV APP_HOST=0.0.0.0
-ENV APP_PORT=8000
-
 # Expose port
 EXPOSE 8000
 

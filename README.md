@@ -19,41 +19,17 @@ docker build -t payment-link .
 
 3. **Run the container:**
 
-Using a local directory for data persistence:
-
 ```bash
-mkdir -p ./data
+touch payments.db
 docker run -d \
   -p 8000:8000 \
-  -v $(pwd)/data:/data \
+  -v $(pwd)/payments.db:/app/payments.db \
   --env-file .env \
   --name payment-link \
   payment-link
 ```
 
-Or using a Docker named volume (created automatically):
-
-```bash
-docker run -d \
-  -p 8000:8000 \
-  -v payment-data:/data \
-  --env-file .env \
-  --name payment-link \
-  payment-link
-```
-
-Alternatively, pass individual environment variables with `-e`:
-
-```bash
-mkdir -p ./data
-docker run -d \
-  -p 8000:8000 \
-  -v $(pwd)/data:/data \
-  -e PAY_TO_ADDRESS="0xYourWalletAddress" \
-  -e APP_BASE_URL="http://localhost:8000" \
-  --name payment-link \
-  payment-link
-```
+The `touch` command creates an empty database file, and the `-v` flag mounts it into the container for persistence.
 
 4. **Verify it's running:**
 
