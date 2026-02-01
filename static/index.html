@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Link Service</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 16px;
+            border-radius: 4px;
+            margin-top: 16px;
+        }
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status.warning {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+        .hidden {
+            display: none;
+        }
+        .tx-link {
+            word-break: break-all;
+        }
+        .tx-link a {
+            color: #0066cc;
+        }
+        #wallet-status {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+        .connected {
+            color: #2e7d32 !important;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .section-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <h1>Payment Link Service</h1>
+
+    <!-- Create Payment Link Section -->
+    <div class="card">
+        <h2>Create Payment Link</h2>
+        <label for="amount">Amount (USD)</label>
+        <input type="number" id="amount" placeholder="0.01" step="0.01" min="0.01" value="0.01">
+        <button id="create-btn" onclick="createPaymentLink()">Create Payment Link</button>
+        <div id="create-result" class="status hidden"></div>
+    </div>
+
+    <!-- Pay Section -->
+    <div class="card">
+        <h2>Pay</h2>
+        <div id="wallet-status">Wallet: Not connected</div>
+        <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+        <br><br>
+        <label for="payment-url">Payment URL</label>
+        <input type="text" id="payment-url" placeholder="http://localhost:8000/pay/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <button id="pay-btn" onclick="processPayment()" disabled>Pay Now</button>
+        <div id="pay-result" class="status hidden"></div>
+    </div>
+
+    <!-- Check Status Section -->
+    <div class="card">
+        <h2>Check Payment Status</h2>
+        <label for="status-url">Status URL</label>
+        <input type="text" id="status-url" placeholder="http://localhost:8000/status/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <button id="status-btn" onclick="checkStatus()">Check Status</button>
+        <div id="status-result" class="status hidden"></div>
+    </div>
+
+    <script>
+        let provider = null;
+        let signer = null;
+        let userAddress = null;
+
+        // USDC contract addresses
+        const USDC_ADDRESSES = {
+            'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+        };
+
+        // Chain IDs
+        const CHAIN_IDS = {
+            'base-sepolia': 84532,
+            'base': 8453
+        };
+
+        // Block explorer URLs
+        const EXPLORER_URLS = {
+            'base-sepolia': 'https://sepolia.basescan.org/tx/',
+            'base': 'https://basescan.org/tx/'
+        };
+
+        // ERC-3009 ABI for transferWithAuthorization
+        const USDC_ABI = [
+            "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)",
+            "function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)",
+            "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+            "function balanceOf(address account) view returns (uint256)",
+            "function allowance(address owner, address spender) view returns (uint256)",
+            "function name() view returns (string)",
+            "function version() view returns (string)",
+            "function nonces(address owner) view returns (uint256)",
+            "function DOMAIN_SEPARATOR() view returns (bytes32)"
+        ];
+
+        async function connectWallet() {
+            try {
+                if (!window.ethereum) {
+                    showResult('pay-result', 'error', 'Please install MetaMask or another Web3 wallet');
+                    return;
+                }
+
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = await provider.getSigner();
+                userAddress = await signer.getAddress();
+
+                const network = await provider.getNetwork();
+                document.getElementById('wallet-status').innerHTML =
+                    `Wallet: <span class="connected">${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</span> (Chain ID: ${network.chainId})`;
+                document.getElementById('pay-btn').disabled = false;
+                document.getElementById('connect-btn').textContent = 'Connected';
+
+                showResult('pay-result', 'success', `Connected: ${userAddress}`);
+            } catch (error) {
+                showResult('pay-result', 'error', `Failed to connect wallet: ${error.message}`);
+            }
+        }
+
+        async function createPaymentLink() {
+            const amount = document.getElementById('amount').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showResult('create-result', 'error', 'Please enter a valid amount');
+                return;
+            }
+
+            try {
+                document.getElementById('create-btn').disabled = true;
+                showResult('create-result', 'info', 'Creating payment link...');
+
+                const response = await fetch(`/create-payment-link?amount=${amount}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    const paymentUrl = data.payment_url;
+                    const statusUrl = paymentUrl.replace('/pay/', '/status/');
+
+                    document.getElementById('payment-url').value = paymentUrl;
+                    document.getElementById('status-url').value = statusUrl;
+
+                    showResult('create-result', 'success',
+                        `Payment link created!<br><br>` +
+                        `<strong>Payment ID:</strong> ${data.payment_id}<br>` +
+                        `<strong>Amount:</strong> $${data.amount} USD<br>` +
+                        `<strong>URL:</strong> <a href="${paymentUrl}" target="_blank">${paymentUrl}</a>`
+                    );
+                } else {
+                    showResult('create-result', 'error', `Error: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                showResult('create-result', 'error', `Failed to create payment link: ${error.message}`);
+            } finally {
+                document.getElementById('create-btn').disabled = false;
+            }
+        }
+
+        async function processPayment() {
+            const paymentUrl = document.getElementById('payment-url').value;
+            if (!paymentUrl) {
+                showResult('pay-result', 'error', 'Please enter a payment URL');
+                return;
+            }
+
+            if (!signer) {
+                showResult('pay-result', 'error', 'Please connect your wallet first');
+                return;
+            }
+
+            try {
+                document.getElementById('pay-btn').disabled = true;
+                showResult('pay-result', 'info', 'Fetching payment requirements...');
+
+                // Step 1: Fetch payment requirements
+                const response = await fetch(paymentUrl);
+
+                if (response.status === 200) {
+                    const data = await response.json();
+                    if (data.status === 'paid') {
+                        showResult('pay-result', 'success',
+                            `Already paid!<br><br>` +
+                            `<strong>TX Hash:</strong> <span class="tx-link">${data.tx}</span>`
+                        );
+                        return;
+                    }
+                }
+
+                if (response.status !== 402) {
+                    const text = await response.text();
+                    showResult('pay-result', 'error', `Unexpected response (${response.status}): ${text}`);
+                    return;
+                }
+
+                const paymentReq = await response.json();
+                console.log('Payment requirements:', paymentReq);
+
+                if (!paymentReq.accepts || paymentReq.accepts.length === 0) {
+                    showResult('pay-result', 'error', 'No payment options available');
+                    return;
+                }
+
+                // Get the first payment requirement
+                const req = paymentReq.accepts[0];
+                const network = req.network;
+                const expectedChainId = CHAIN_IDS[network];
+
+                // Check network
+                const currentNetwork = await provider.getNetwork();
+                if (Number(currentNetwork.chainId) !== expectedChainId) {
+                    showResult('pay-result', 'warning',
+                        `Please switch to ${network} (Chain ID: ${expectedChainId}). Current: ${currentNetwork.chainId}`
+                    );
+
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + expectedChainId.toString(16) }],
+                        });
+                        // Reconnect after switch
+                        provider = new ethers.BrowserProvider(window.ethereum);
+                        signer = await provider.getSigner();
+                    } catch (switchError) {
+                        showResult('pay-result', 'error', `Failed to switch network: ${switchError.message}`);
+                        return;
+                    }
+                }
+
+                showResult('pay-result', 'info', 'Preparing payment signature...');
+
+                // Step 2: Create and sign the payment
+                const usdcAddress = req.asset;
+                const usdc = new ethers.Contract(usdcAddress, USDC_ABI, signer);
+
+                const amount = BigInt(req.maxAmountRequired);
+                const payTo = req.payTo;
+                const validAfter = 0;
+                const validBefore = Math.floor(Date.now() / 1000) + req.maxTimeoutSeconds;
+                const nonce = ethers.hexlify(ethers.randomBytes(32));
+
+                // Get token name and version for EIP-712 domain
+                const tokenName = req.extra?.name || await usdc.name();
+                const tokenVersion = req.extra?.version || '2';
+
+                // EIP-712 domain
+                const domain = {
+                    name: tokenName,
+                    version: tokenVersion,
+                    chainId: expectedChainId,
+                    verifyingContract: usdcAddress
+                };
+
+                // EIP-712 types for TransferWithAuthorization
+                const types = {
+                    TransferWithAuthorization: [
+                        { name: 'from', type: 'address' },
+                        { name: 'to', type: 'address' },
+                        { name: 'value', type: 'uint256' },
+                        { name: 'validAfter', type: 'uint256' },
+                        { name: 'validBefore', type: 'uint256' },
+                        { name: 'nonce', type: 'bytes32' }
+                    ]
+                };
+
+                const message = {
+                    from: userAddress,
+                    to: payTo,
+                    value: amount,
+                    validAfter: validAfter,
+                    validBefore: validBefore,
+                    nonce: nonce
+                };
+
+                showResult('pay-result', 'info', 'Please sign the transaction in your wallet...');
+
+                // Sign the typed data
+                const signature = await signer.signTypedData(domain, types, message);
+                const sig = ethers.Signature.from(signature);
+
+                // Create the payment payload
+                const paymentPayload = {
+                    x402Version: 1,
+                    scheme: 'exact',
+                    network: network,
+                    payload: {
+                        signature: signature,
+                        authorization: {
+                            from: userAddress,
+                            to: payTo,
+                            value: amount.toString(),
+                            validAfter: validAfter.toString(),
+                            validBefore: validBefore.toString(),
+                            nonce: nonce
+                        }
+                    }
+                };
+
+                // Base64 encode the payload
+                const paymentHeader = btoa(JSON.stringify(paymentPayload));
+
+                showResult('pay-result', 'info', 'Submitting payment...');
+
+                // Step 3: Submit payment
+                const payResponse = await fetch(paymentUrl, {
+                    headers: {
+                        'X-Payment': paymentHeader
+                    }
+                });
+
+                const payResult = await payResponse.json();
+                console.log('Payment result:', payResult);
+
+                if (payResponse.ok && payResult.status === 'paid') {
+                    const explorerUrl = EXPLORER_URLS[network] + payResult.tx;
+                    showResult('pay-result', 'success',
+                        `Payment successful!<br><br>` +
+                        `<strong>TX Hash:</strong><br>` +
+                        `<span class="tx-link"><a href="${explorerUrl}" target="_blank">${payResult.tx}</a></span>`
+                    );
+                } else {
+                    showResult('pay-result', 'error',
+                        `Payment failed: ${payResult.error || JSON.stringify(payResult)}`
+                    );
+                }
+
+            } catch (error) {
+                console.error('Payment error:', error);
+                showResult('pay-result', 'error', `Payment failed: ${error.message}`);
+            } finally {
+                document.getElementById('pay-btn').disabled = false;
+            }
+        }
+
+        async function checkStatus() {
+            const statusUrl = document.getElementById('status-url').value;
+            if (!statusUrl) {
+                showResult('status-result', 'error', 'Please enter a status URL');
+                return;
+            }
+
+            try {
+                document.getElementById('status-btn').disabled = true;
+                showResult('status-result', 'info', 'Checking status...');
+
+                const response = await fetch(statusUrl);
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.paid) {
+                        showResult('status-result', 'success',
+                            `<strong>Status:</strong> Paid<br>` +
+                            `<strong>Amount:</strong> $${data.amount} USD<br>` +
+                            `<strong>TX Hash:</strong><br>` +
+                            `<span class="tx-link">${data.tx}</span>`
+                        );
+                    } else {
+                        showResult('status-result', 'warning',
+                            `<strong>Status:</strong> Pending<br>` +
+                            `<strong>Amount:</strong> $${data.amount} USD`
+                        );
+                    }
+                } else {
+                    showResult('status-result', 'error', `Error: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                showResult('status-result', 'error', `Failed to check status: ${error.message}`);
+            } finally {
+                document.getElementById('status-btn').disabled = false;
+            }
+        }
+
+        function showResult(elementId, type, message) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.innerHTML = message;
+            element.classList.remove('hidden');
+        }
+
+        // Auto-connect if wallet is already connected
+        window.addEventListener('load', async () => {
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                await connectWallet();
+            }
+        });
+    </script>
+</body>
+</html>

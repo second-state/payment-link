@@ -44,8 +44,8 @@ jobs:
       - name: "Test 1: Health Check"
         run: |
           RESPONSE=$(curl -s http://localhost:8080/)
-          echo "$RESPONSE"
-          echo "$RESPONSE" | grep -q '"status":"running"'
+          echo "$RESPONSE" | head -5
+          echo "$RESPONSE" | grep -q 'Payment Link Service'
 
       - name: "Test 2: Create Payment Link"
         run: |

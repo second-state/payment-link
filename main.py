@@ -2,13 +2,18 @@
 
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_payment, get_payment, init_db, update_payment_status
+
+# Static files directory
+STATIC_DIR = Path(__file__).parent / "static"
 
 if TYPE_CHECKING:
     from x402_payment_service import PaymentService as PaymentServiceType
@@ -47,13 +52,23 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
+# Mount static files if directory exists
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 @app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint with service info."""
-    return {
-        "service": settings.app_name,
-        "status": "running",
-    }
+async def root() -> Response:
+    """Serve the index.html page."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return JSONResponse(
+        {
+            "service": settings.app_name,
+            "status": "running",
+        }
+    )
 
 
 @app.get("/create-payment-link")

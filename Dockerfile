@@ -17,6 +17,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
 COPY main.py config.py database.py ./
+COPY static/ ./static/
 
 # Expose port
 EXPOSE 8000

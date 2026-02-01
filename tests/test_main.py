@@ -28,12 +28,12 @@ def client() -> Generator[TestClient, None, None]:
 
 
 def test_root_endpoint(client: TestClient) -> None:
-    """Test the root endpoint returns service info."""
+    """Test the root endpoint returns the index.html page."""
     response = client.get("/")
     assert response.status_code == 200
-    data = response.json()
-    assert "service" in data
-    assert data["status"] == "running"
+    # Should return HTML content
+    assert "<!DOCTYPE html>" in response.text
+    assert "Payment Link Service" in response.text
 
 
 def test_create_payment_link(client: TestClient) -> None:
