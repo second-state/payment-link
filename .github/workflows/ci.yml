@@ -44,18 +44,20 @@ jobs:
       - name: "Test 1: Health Check"
         run: |
           RESPONSE=$(curl -s http://localhost:8080/)
-          echo "$RESPONSE"
-          echo "$RESPONSE" | grep -q '"status":"running"'
+          echo "$RESPONSE" | head -5
+          echo "$RESPONSE" | grep -q 'Payment Link Service'
 
       - name: "Test 2: Create Payment Link"
         run: |
-          RESPONSE=$(curl -s "http://localhost:8080/create-payment-link?amount=0.05")
+          TEST_RECEIVER="0x1234567890abcdef1234567890abcdef12345678"
+          RESPONSE=$(curl -s "http://localhost:8080/create-payment-link?amount=0.05&receiver=$TEST_RECEIVER")
           echo "$RESPONSE"
           PAYMENT_ID=$(echo "$RESPONSE" | jq -r '.payment_id')
           echo "PAYMENT_ID=$PAYMENT_ID" >> $GITHUB_ENV
           echo "$RESPONSE" | jq -e '.payment_id' > /dev/null
           echo "$RESPONSE" | jq -e '.payment_url' > /dev/null
           echo "$RESPONSE" | jq -e '.amount' > /dev/null
+          echo "$RESPONSE" | jq -e '.receiver' > /dev/null
 
       - name: "Test 2b: Verify Database Record"
         run: |
@@ -64,15 +66,17 @@ jobs:
           conn = sqlite3.connect('payments.db')
           conn.row_factory = sqlite3.Row
           cur = conn.cursor()
-          cur.execute('SELECT payment_id, amount, status, tx_hash FROM payments WHERE payment_id=?', ('${{ env.PAYMENT_ID }}',))
+          cur.execute('SELECT payment_id, amount, receiver, status, tx_hash FROM payments WHERE payment_id=?', ('${{ env.PAYMENT_ID }}',))
           row = cur.fetchone()
           assert row is not None, 'Record not found in database'
           assert row['amount'] == 0.05, f'Amount mismatch: {row[\"amount\"]}'
+          assert row['receiver'] == '0x1234567890abcdef1234567890abcdef12345678', f'Receiver mismatch: {row[\"receiver\"]}'
           assert row['status'] == 'pending', f'Status mismatch: {row[\"status\"]}'
           assert row['tx_hash'] is None, f'tx_hash should be None: {row[\"tx_hash\"]}'
           print('Database record verified successfully')
           print(f'  payment_id: {row[\"payment_id\"]}')
           print(f'  amount: {row[\"amount\"]}')
+          print(f'  receiver: {row[\"receiver\"]}')
           print(f'  status: {row[\"status\"]}')
           print(f'  tx_hash: {row[\"tx_hash\"]}')
           conn.close()

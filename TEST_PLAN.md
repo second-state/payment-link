@@ -70,7 +70,8 @@ curl -s http://localhost:8080/ | jq
 
 **Request:**
 ```bash
-curl -s "http://localhost:8080/create-payment-link?amount=0.01" | jq
+TEST_RECEIVER="0x1234567890abcdef1234567890abcdef12345678"
+curl -s "http://localhost:8080/create-payment-link?amount=0.01&receiver=$TEST_RECEIVER" | jq
 ```
 
 **Expected Response:**
@@ -78,18 +79,20 @@ curl -s "http://localhost:8080/create-payment-link?amount=0.01" | jq
 {
   "payment_id": "<uuid>",
   "payment_url": "http://localhost:8080/pay/<uuid>",
-  "amount": "0.01"
+  "amount": "0.01",
+  "receiver": "0x1234567890abcdef1234567890abcdef12345678"
 }
 ```
 
 **Pass Criteria:**
 - Status code 200
-- Response contains `payment_id`, `payment_url`, and `amount`
+- Response contains `payment_id`, `payment_url`, `amount`, and `receiver`
 - `payment_url` matches the format `http://localhost:8080/pay/<payment_id>`
 
 **Save the payment_id for subsequent tests:**
 ```bash
-PAYMENT_ID=$(curl -s "http://localhost:8080/create-payment-link?amount=0.05" | jq -r '.payment_id')
+TEST_RECEIVER="0x1234567890abcdef1234567890abcdef12345678"
+PAYMENT_ID=$(curl -s "http://localhost:8080/create-payment-link?amount=0.05&receiver=$TEST_RECEIVER" | jq -r '.payment_id')
 echo "Payment ID: $PAYMENT_ID"
 ```
 
@@ -101,29 +104,30 @@ Directly query the SQLite database to confirm the payment was stored correctly.
 
 **Request:**
 ```bash
-sqlite3 payments.db "SELECT payment_id, amount, status, tx_hash FROM payments WHERE payment_id='$PAYMENT_ID';"
+sqlite3 payments.db "SELECT payment_id, amount, receiver, status, tx_hash FROM payments WHERE payment_id='$PAYMENT_ID';"
 ```
 
 **Expected Output:**
 ```
-<payment_id>|0.05|pending|
+<payment_id>|0.05|0x1234567890abcdef1234567890abcdef12345678|pending|
 ```
 
 **Alternative (formatted output):**
 ```bash
-sqlite3 -header -column payments.db "SELECT payment_id, amount, status, tx_hash, created_at FROM payments WHERE payment_id='$PAYMENT_ID';"
+sqlite3 -header -column payments.db "SELECT payment_id, amount, receiver, status, tx_hash, created_at FROM payments WHERE payment_id='$PAYMENT_ID';"
 ```
 
 **Expected Output:**
 ```
-payment_id                            amount      status      tx_hash     created_at
-------------------------------------  ----------  ----------  ----------  -------------------
-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  0.05        pending                 2024-01-01 12:00:00
+payment_id                            amount      receiver                                    status      tx_hash     created_at
+------------------------------------  ----------  ------------------------------------------  ----------  ----------  -------------------
+xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  0.05        0x1234567890abcdef1234567890abcdef12345678  pending                 2024-01-01 12:00:00
 ```
 
 **Pass Criteria:**
 - Record exists in the database
 - `amount` matches the requested amount (0.05)
+- `receiver` matches the requested receiver address
 - `status` is `pending`
 - `tx_hash` is empty/null
 
@@ -287,28 +291,29 @@ Save this as `test_endpoints.sh` and run with `bash test_endpoints.sh`:
 #!/bin/bash
 
 BASE_URL="http://localhost:8080"
+TEST_RECEIVER="0x1234567890abcdef1234567890abcdef12345678"
 
 echo "=== Test 1: Health Check ==="
-curl -s "$BASE_URL/" | jq
+curl -s "$BASE_URL/" | head -5
 echo
 
 echo "=== Test 2: Create Payment Link ==="
-RESPONSE=$(curl -s "$BASE_URL/create-payment-link?amount=0.05")
+RESPONSE=$(curl -s "$BASE_URL/create-payment-link?amount=0.05&receiver=$TEST_RECEIVER")
 echo "$RESPONSE" | jq
 PAYMENT_ID=$(echo "$RESPONSE" | jq -r '.payment_id')
 echo "Saved Payment ID: $PAYMENT_ID"
 echo
 
 echo "=== Test 2b: Verify Database Record ==="
-sqlite3 -header -column payments.db "SELECT payment_id, amount, status, tx_hash, created_at FROM payments WHERE payment_id='$PAYMENT_ID';"
+sqlite3 -header -column payments.db "SELECT payment_id, amount, receiver, status, tx_hash, created_at FROM payments WHERE payment_id='$PAYMENT_ID';"
 echo
 
 echo "=== Test 3: Invalid Amount ==="
-curl -s -w "HTTP Status: %{http_code}\n" "$BASE_URL/create-payment-link?amount=-5" | head -1
+curl -s -w "HTTP Status: %{http_code}\n" "$BASE_URL/create-payment-link?amount=-5&receiver=$TEST_RECEIVER" | head -1
 echo
 
 echo "=== Test 4: Missing Amount ==="
-curl -s -w "HTTP Status: %{http_code}\n" "$BASE_URL/create-payment-link" | head -1
+curl -s -w "HTTP Status: %{http_code}\n" "$BASE_URL/create-payment-link?receiver=$TEST_RECEIVER" | head -1
 echo
 
 echo "=== Test 5: Check Payment Status (Pending) ==="

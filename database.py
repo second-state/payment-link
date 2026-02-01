@@ -12,6 +12,7 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS payments (
                 payment_id TEXT PRIMARY KEY,
                 amount REAL NOT NULL,
+                receiver TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 tx_hash TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -21,17 +22,19 @@ async def init_db() -> None:
         await db.commit()
 
 
-async def create_payment(payment_id: str, amount: float) -> None:
+async def create_payment(payment_id: str, amount: float, receiver: str) -> None:
     """Create a new payment record.
 
     Args:
         payment_id: Unique identifier for the payment.
         amount: Payment amount in USD.
+        receiver: Blockchain address to receive the payment.
     """
     async with aiosqlite.connect(settings.database_path) as db:
         await db.execute(
-            "INSERT INTO payments (payment_id, amount, status) VALUES (?, ?, ?)",
-            (payment_id, amount, "pending"),
+            "INSERT INTO payments (payment_id, amount, receiver, status) "
+            "VALUES (?, ?, ?, ?)",
+            (payment_id, amount, receiver, "pending"),
         )
         await db.commit()
 

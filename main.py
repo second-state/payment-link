@@ -2,13 +2,18 @@
 
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import create_payment, get_payment, init_db, update_payment_status
+
+# Static files directory
+STATIC_DIR = Path(__file__).parent / "static"
 
 if TYPE_CHECKING:
     from x402_payment_service import PaymentService as PaymentServiceType
@@ -47,35 +52,48 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
+# Mount static files if directory exists
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 @app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint with service info."""
-    return {
-        "service": settings.app_name,
-        "status": "running",
-    }
+async def root() -> Response:
+    """Serve the index.html page."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return JSONResponse(
+        {
+            "service": settings.app_name,
+            "status": "running",
+        }
+    )
 
 
 @app.get("/create-payment-link")
 async def create_payment_link(
     amount: float = Query(..., gt=0, description="Payment amount in USD"),
+    receiver: str = Query(..., description="Blockchain address to receive payment"),
 ) -> dict[str, str]:
     """Create a new payment link with a unique ID.
 
     Args:
         amount: Payment amount in USD (must be greater than 0).
+        receiver: Blockchain address to receive the payment.
 
     Returns:
         JSON with the payment link URL.
     """
     payment_id = str(uuid.uuid4())
-    await create_payment(payment_id, amount)
+    await create_payment(payment_id, amount, receiver)
 
     payment_url = f"{settings.app_base_url}/pay/{payment_id}"
     return {
         "payment_id": payment_id,
         "payment_url": payment_url,
         "amount": str(amount),
+        "receiver": receiver,
     }
 
 
@@ -153,7 +171,7 @@ async def pay(payment_id: str, request: Request) -> Response:
             price=payment_record["amount"],
             description=f"Payment for order {payment_id}",
             network=settings.network,
-            pay_to_address=settings.pay_to_address,
+            pay_to_address=payment_record["receiver"],
             facilitator_url=settings.facilitator_url,
             max_timeout_seconds=settings.max_timeout_seconds,
         )
