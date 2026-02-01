@@ -34,7 +34,6 @@ class Settings:
         self.token_name: str = os.getenv("TOKEN_NAME", "USD Coin")
         self.token_symbol: str = os.getenv("TOKEN_SYMBOL", "USDC")
         self.token_decimals: int = int(os.getenv("TOKEN_DECIMALS", "6"))
-        self.token_version: str = os.getenv("TOKEN_VERSION", "2")
 
         # Chain settings
         self.chain_id: int = int(os.getenv("CHAIN_ID", "84532"))

@@ -84,7 +84,6 @@ async def get_config() -> dict[str, str | int]:
         "tokenName": settings.token_name,
         "tokenSymbol": settings.token_symbol,
         "tokenDecimals": settings.token_decimals,
-        "tokenVersion": settings.token_version,
         "chainId": settings.chain_id,
         "explorerUrl": settings.explorer_url,
     }

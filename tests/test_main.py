@@ -47,7 +47,6 @@ def test_config_endpoint(client: TestClient) -> None:
     assert "tokenName" in data
     assert "tokenSymbol" in data
     assert "tokenDecimals" in data
-    assert "tokenVersion" in data
     assert "chainId" in data
     assert "explorerUrl" in data
     # Check types
