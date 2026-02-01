@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Payment Link</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 16px;
+            border-radius: 4px;
+            margin-top: 16px;
+        }
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .hidden {
+            display: none;
+        }
+        .link-box {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+            word-break: break-all;
+        }
+        .link-box a {
+            color: #0066cc;
+        }
+        .link-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .copy-btn {
+            background: #666;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 8px;
+            width: auto;
+        }
+        .copy-btn:hover {
+            background: #555;
+        }
+        .result-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <h1>Create Payment Link</h1>
+
+    <div class="card">
+        <label for="receiver">Receiver Address</label>
+        <input type="text" id="receiver" placeholder="0x1234567890abcdef1234567890abcdef12345678">
+
+        <label for="amount">Amount (USD)</label>
+        <input type="number" id="amount" placeholder="0.01" step="0.01" min="0.01" value="0.01">
+
+        <button id="create-btn" onclick="createPaymentLink()">Create Payment Link</button>
+
+        <div id="create-result" class="status hidden"></div>
+
+        <div id="links-section" class="result-section hidden">
+            <h3>Payment Links</h3>
+
+            <div class="link-label">API Payment Link (for x402 clients)</div>
+            <div class="link-box">
+                <a id="api-link" href="#" target="_blank"></a>
+                <button class="copy-btn" onclick="copyToClipboard('api-link')">Copy</button>
+            </div>
+
+            <div class="link-label">Browser Payment Link (for wallet users)</div>
+            <div class="link-box">
+                <a id="browser-link" href="#" target="_blank"></a>
+                <button class="copy-btn" onclick="copyToClipboard('browser-link')">Copy</button>
+            </div>
+
+            <div class="link-label">Status Check Link</div>
+            <div class="link-box">
+                <a id="status-link" href="#" target="_blank"></a>
+                <button class="copy-btn" onclick="copyToClipboard('status-link')">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function createPaymentLink() {
+            const receiver = document.getElementById('receiver').value;
+            const amount = document.getElementById('amount').value;
+
+            if (!receiver || !receiver.startsWith('0x') || receiver.length !== 42) {
+                showResult('error', 'Please enter a valid receiver address (0x...)');
+                return;
+            }
+
+            if (!amount || parseFloat(amount) <= 0) {
+                showResult('error', 'Please enter a valid amount');
+                return;
+            }
+
+            try {
+                document.getElementById('create-btn').disabled = true;
+                showResult('info', 'Creating payment link...');
+
+                const response = await fetch(`/create-payment-link?amount=${amount}&receiver=${receiver}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    const paymentId = data.payment_id;
+                    const apiUrl = data.payment_url;
+                    const browserUrl = `${window.location.origin}/?pid=${paymentId}`;
+                    const statusUrl = `${window.location.origin}/status/${paymentId}`;
+
+                    // Update links
+                    document.getElementById('api-link').href = apiUrl;
+                    document.getElementById('api-link').textContent = apiUrl;
+
+                    document.getElementById('browser-link').href = browserUrl;
+                    document.getElementById('browser-link').textContent = browserUrl;
+
+                    document.getElementById('status-link').href = statusUrl;
+                    document.getElementById('status-link').textContent = statusUrl;
+
+                    // Show success message
+                    showResult('success',
+                        `Payment link created!<br><br>` +
+                        `<strong>Payment ID:</strong> ${paymentId}<br>` +
+                        `<strong>Amount:</strong> $${data.amount} USD<br>` +
+                        `<strong>Receiver:</strong> ${data.receiver}`
+                    );
+
+                    // Show links section
+                    document.getElementById('links-section').classList.remove('hidden');
+                } else {
+                    showResult('error', `Error: ${JSON.stringify(data)}`);
+                }
+            } catch (error) {
+                showResult('error', `Failed to create payment link: ${error.message}`);
+            } finally {
+                document.getElementById('create-btn').disabled = false;
+            }
+        }
+
+        function showResult(type, message) {
+            const element = document.getElementById('create-result');
+            element.className = `status ${type}`;
+            element.innerHTML = message;
+            element.classList.remove('hidden');
+        }
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                // Brief visual feedback
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+    </script>
+</body>
+</html>
