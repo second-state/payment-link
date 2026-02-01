@@ -130,8 +130,8 @@
         <div id="wallet-status">Wallet: Not connected</div>
         <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
         <br><br>
-        <label for="payment-url">Payment URL</label>
-        <input type="text" id="payment-url" placeholder="http://localhost:8000/pay/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <label for="payment-url">Payment URL or ID</label>
+        <input type="text" id="payment-url" placeholder="Payment ID or full URL">
         <button id="pay-btn" onclick="processPayment()" disabled>Pay Now</button>
         <div id="pay-result" class="status hidden"></div>
     </div>
@@ -139,8 +139,8 @@
     <!-- Check Status Section -->
     <div class="card">
         <h2>Check Payment Status</h2>
-        <label for="status-url">Status URL</label>
-        <input type="text" id="status-url" placeholder="http://localhost:8000/status/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <label for="status-url">Payment URL or ID</label>
+        <input type="text" id="status-url" placeholder="Payment ID or full URL">
         <button id="status-btn" onclick="checkStatus()">Check Status</button>
         <div id="status-result" class="status hidden"></div>
     </div>
@@ -251,9 +251,15 @@
         }
 
         async function processPayment() {
-            const paymentUrl = document.getElementById('payment-url').value;
+            const paymentInput = document.getElementById('payment-url').value;
+            if (!paymentInput) {
+                showResult('pay-result', 'error', 'Please enter a payment URL or ID');
+                return;
+            }
+
+            const paymentUrl = getPaymentUrl(paymentInput, 'pay');
             if (!paymentUrl) {
-                showResult('pay-result', 'error', 'Please enter a payment URL');
+                showResult('pay-result', 'error', 'Invalid payment URL or ID');
                 return;
             }
 
@@ -426,9 +432,15 @@
         }
 
         async function checkStatus() {
-            const statusUrl = document.getElementById('status-url').value;
+            const statusInput = document.getElementById('status-url').value;
+            if (!statusInput) {
+                showResult('status-result', 'error', 'Please enter a payment URL or ID');
+                return;
+            }
+
+            const statusUrl = getPaymentUrl(statusInput, 'status');
             if (!statusUrl) {
-                showResult('status-result', 'error', 'Please enter a status URL');
+                showResult('status-result', 'error', 'Invalid payment URL or ID');
                 return;
             }
 
@@ -470,8 +482,39 @@
             element.classList.remove('hidden');
         }
 
+        // Helper function to normalize payment input to full URL
+        function getPaymentUrl(input, type = 'pay') {
+            if (!input) return null;
+            input = input.trim();
+
+            // If it's already a full URL, extract the ID and reconstruct
+            if (input.startsWith('http://') || input.startsWith('https://')) {
+                // Extract payment ID from URL path
+                const match = input.match(/\/(pay|status)\/([a-zA-Z0-9-]+)/);
+                if (match) {
+                    const paymentId = match[2];
+                    return `${window.location.origin}/${type}/${paymentId}`;
+                }
+                return input; // Return as-is if we can't parse it
+            }
+
+            // It's just a payment ID, construct the full URL
+            return `${window.location.origin}/${type}/${input}`;
+        }
+
+        // Pre-fill from URL query parameter
+        function prefillFromQueryParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pid = urlParams.get('pid');
+            if (pid) {
+                document.getElementById('payment-url').value = pid;
+                document.getElementById('status-url').value = pid;
+            }
+        }
+
         // Auto-connect if wallet is already connected
         window.addEventListener('load', async () => {
+            prefillFromQueryParams();
             if (window.ethereum && window.ethereum.selectedAddress) {
                 await connectWallet();
             }
