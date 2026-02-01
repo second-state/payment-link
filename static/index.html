@@ -150,23 +150,8 @@
         let signer = null;
         let userAddress = null;
 
-        // USDC contract addresses
-        const USDC_ADDRESSES = {
-            'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-            'base': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
-        };
-
-        // Chain IDs
-        const CHAIN_IDS = {
-            'base-sepolia': 84532,
-            'base': 8453
-        };
-
-        // Block explorer URLs
-        const EXPLORER_URLS = {
-            'base-sepolia': 'https://sepolia.basescan.org/tx/',
-            'base': 'https://basescan.org/tx/'
-        };
+        // Server configuration (loaded from /config endpoint)
+        let serverConfig = null;
 
         // ERC-3009 ABI for transferWithAuthorization
         const USDC_ABI = [
@@ -303,7 +288,12 @@
                 // Get the first payment requirement
                 const req = paymentReq.accepts[0];
                 const network = req.network;
-                const expectedChainId = CHAIN_IDS[network];
+                const expectedChainId = serverConfig?.chainId;
+
+                if (!expectedChainId) {
+                    showResult('pay-result', 'error', 'Server config not loaded');
+                    return;
+                }
 
                 // Check network
                 const currentNetwork = await provider.getNetwork();
@@ -411,7 +401,7 @@
                 console.log('Payment result:', payResult);
 
                 if (payResponse.ok && payResult.status === 'paid') {
-                    const explorerUrl = EXPLORER_URLS[network] + payResult.tx;
+                    const explorerUrl = serverConfig.explorerUrl + payResult.tx;
                     showResult('pay-result', 'success',
                         `Payment successful!<br><br>` +
                         `<strong>TX Hash:</strong><br>` +
@@ -512,8 +502,24 @@
             }
         }
 
-        // Auto-connect if wallet is already connected
+        // Load server configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch('/config');
+                if (response.ok) {
+                    serverConfig = await response.json();
+                    console.log('Server config loaded:', serverConfig);
+                } else {
+                    console.error('Failed to load config:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
+
+        // Initialize on page load
         window.addEventListener('load', async () => {
+            await loadConfig();
             prefillFromQueryParams();
             if (window.ethereum && window.ethereum.selectedAddress) {
                 await connectWallet();

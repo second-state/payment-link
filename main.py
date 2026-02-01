@@ -71,6 +71,25 @@ async def root() -> Response:
     )
 
 
+@app.get("/config")
+async def get_config() -> dict[str, str | int]:
+    """Return client configuration for the frontend.
+
+    Returns:
+        JSON with network, token, and chain configuration.
+    """
+    return {
+        "network": settings.network,
+        "tokenAddress": settings.token_address,
+        "tokenName": settings.token_name,
+        "tokenSymbol": settings.token_symbol,
+        "tokenDecimals": settings.token_decimals,
+        "tokenVersion": settings.token_version,
+        "chainId": settings.chain_id,
+        "explorerUrl": settings.explorer_url,
+    }
+
+
 @app.get("/create-payment-link")
 async def create_payment_link(
     amount: float = Query(..., gt=0, description="Payment amount in USD"),
