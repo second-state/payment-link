@@ -36,25 +36,35 @@ def test_root_endpoint(client: TestClient) -> None:
     assert "Payment Link Service" in response.text
 
 
+TEST_RECEIVER = "0x1234567890abcdef1234567890abcdef12345678"
+
+
 def test_create_payment_link(client: TestClient) -> None:
     """Test creating a payment link."""
-    response = client.get("/create-payment-link?amount=10.50")
+    response = client.get(f"/create-payment-link?amount=10.50&receiver={TEST_RECEIVER}")
     assert response.status_code == 200
     data = response.json()
     assert "payment_id" in data
     assert "payment_url" in data
     assert float(data["amount"]) == 10.50
+    assert data["receiver"] == TEST_RECEIVER
 
 
 def test_create_payment_link_invalid_amount(client: TestClient) -> None:
     """Test creating a payment link with invalid amount."""
-    response = client.get("/create-payment-link?amount=-5")
+    response = client.get(f"/create-payment-link?amount=-5&receiver={TEST_RECEIVER}")
     assert response.status_code == 422  # Validation error
 
 
 def test_create_payment_link_missing_amount(client: TestClient) -> None:
     """Test creating a payment link without amount."""
-    response = client.get("/create-payment-link")
+    response = client.get(f"/create-payment-link?receiver={TEST_RECEIVER}")
+    assert response.status_code == 422  # Missing required parameter
+
+
+def test_create_payment_link_missing_receiver(client: TestClient) -> None:
+    """Test creating a payment link without receiver."""
+    response = client.get("/create-payment-link?amount=10.50")
     assert response.status_code == 422  # Missing required parameter
 
 
@@ -75,7 +85,9 @@ def test_status_nonexistent_payment(client: TestClient) -> None:
 def test_payment_flow_without_x402_header(client: TestClient) -> None:
     """Test the payment flow without x402 header returns 402."""
     # Create a payment link
-    create_response = client.get("/create-payment-link?amount=0.01")
+    create_response = client.get(
+        f"/create-payment-link?amount=0.01&receiver={TEST_RECEIVER}"
+    )
     assert create_response.status_code == 200
     payment_id = create_response.json()["payment_id"]
 
@@ -88,7 +100,9 @@ def test_payment_flow_without_x402_header(client: TestClient) -> None:
 def test_status_after_create(client: TestClient) -> None:
     """Test checking status after creating a payment."""
     # Create a payment link
-    create_response = client.get("/create-payment-link?amount=5.00")
+    create_response = client.get(
+        f"/create-payment-link?amount=5.00&receiver={TEST_RECEIVER}"
+    )
     assert create_response.status_code == 200
     payment_id = create_response.json()["payment_id"]
 

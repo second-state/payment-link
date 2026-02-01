@@ -43,28 +43,21 @@ Configure the service using environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PAY_TO_ADDRESS` | `0xYourWalletAddress` | Wallet address to receive payments |
 | `NETWORK` | `base-sepolia` | Blockchain network (`base-sepolia` for testnet, `base` for mainnet) |
 | `APP_BASE_URL` | `http://localhost:8000` | Public base URL for generated payment links |
 | `APP_NAME` | `Payment Link Service` | Service name displayed in payment UI |
 | `APP_LOGO` | `/static/logo.png` | Logo URL for payment UI |
 | `FACILITATOR_URL` | `https://x402f1.secondstate.io` | x402 facilitator service endpoint |
 | `MAX_TIMEOUT_SECONDS` | `60` | Payment timeout in seconds |
-| `DATABASE_PATH` | `/data/payments.db` | SQLite database file path |
+| `DATABASE_PATH` | `payments.db` | SQLite database file path |
 
 ## API Endpoints
 
 ### GET /
 
-Health check endpoint.
+Serves the web UI for creating and paying payment links.
 
-**Response:**
-```json
-{
-  "service": "Payment Link Service",
-  "status": "running"
-}
-```
+Open in a browser to access the interactive payment interface.
 
 ---
 
@@ -77,10 +70,11 @@ Creates a new payment link with a unique ID.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `amount` | float | Yes | Payment amount in USD (must be > 0) |
+| `receiver` | string | Yes | Blockchain address to receive the payment |
 
 **Example Request:**
 ```bash
-curl "http://localhost:8000/create-payment-link?amount=0.01"
+curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x1234567890abcdef1234567890abcdef12345678"
 ```
 
 **Response:**
@@ -88,7 +82,8 @@ curl "http://localhost:8000/create-payment-link?amount=0.01"
 {
   "payment_id": "550e8400-e29b-41d4-a716-446655440000",
   "payment_url": "http://localhost:8000/pay/550e8400-e29b-41d4-a716-446655440000",
-  "amount": "0.01"
+  "amount": "0.01",
+  "receiver": "0x1234567890abcdef1234567890abcdef12345678"
 }
 ```
 

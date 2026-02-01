@@ -20,7 +20,6 @@ class Settings:
         self.app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
         # x402 Payment settings
-        self.pay_to_address: str = os.getenv("PAY_TO_ADDRESS", "0xYourWalletAddress")
         self.network: str = os.getenv("NETWORK", "base-sepolia")
         self.facilitator_url: str = os.getenv(
             "FACILITATOR_URL", "https://x402f1.secondstate.io"
