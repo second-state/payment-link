@@ -32,6 +32,21 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch all unhandled exceptions and return a JSON error response."""
+    import traceback
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc),
+            "type": type(exc).__name__,
+            "traceback": traceback.format_exc(),
+        },
+    )
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint with service info."""
