@@ -71,6 +71,18 @@ async def root() -> Response:
     )
 
 
+@app.get("/create")
+async def create_page() -> Response:
+    """Serve the create payment link page."""
+    create_path = STATIC_DIR / "create-payment-link.html"
+    if create_path.exists():
+        return FileResponse(create_path)
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Page not found"},
+    )
+
+
 @app.get("/config")
 async def get_config() -> dict[str, str | int]:
     """Return client configuration for the frontend.
