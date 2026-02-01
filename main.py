@@ -129,21 +129,34 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Create payment service for x402 verification
-    payment_service: PaymentServiceType = PaymentService(
-        app_name=settings.app_name,
-        app_logo=settings.app_logo,
-        headers=dict(request.headers),
-        resource_url=str(request.url),
-        price=payment_record["amount"],
-        description=f"Payment for order {payment_id}",
-        network=settings.network,
-        pay_to_address=settings.pay_to_address,
-        facilitator_url=settings.facilitator_url,
-        max_timeout_seconds=settings.max_timeout_seconds,
-    )
+    try:
+        payment_service: PaymentServiceType = PaymentService(
+            app_name=settings.app_name,
+            app_logo=settings.app_logo,
+            headers=dict(request.headers),
+            resource_url=str(request.url),
+            price=payment_record["amount"],
+            description=f"Payment for order {payment_id}",
+            network=settings.network,
+            pay_to_address=settings.pay_to_address,
+            facilitator_url=settings.facilitator_url,
+            max_timeout_seconds=settings.max_timeout_seconds,
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to initialize payment service: {e}"},
+        )
 
     # Step 1: Parse payment header
-    success, payment, selected_requirements, parse_error = payment_service.parse()
+    try:
+        success, payment, selected_requirements, parse_error = payment_service.parse()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to parse payment: {e}"},
+        )
+
     if not success or parse_error is not None:
         return create_x402_response(payment_service, parse_error or "Payment required")
 
@@ -152,18 +165,35 @@ async def pay(payment_id: str, request: Request) -> Response:
         return create_x402_response(payment_service, "Invalid payment data")
 
     # Step 2: Verify payment
-    is_valid, verify_error = await payment_service.verify(
-        payment, selected_requirements, payment_id
-    )
+    try:
+        is_valid, verify_error = await payment_service.verify(
+            payment, selected_requirements, payment_id
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to verify payment: {e}"},
+        )
+
     if not is_valid:
         return create_x402_response(
             payment_service, verify_error or "Payment verification failed"
         )
 
     # Step 3: Settle payment
-    settle_success, tx_hash, tx_network, settle_error = await payment_service.settle(
-        payment, selected_requirements, payment_id
-    )
+    try:
+        (
+            settle_success,
+            tx_hash,
+            tx_network,
+            settle_error,
+        ) = await payment_service.settle(payment, selected_requirements, payment_id)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to settle payment: {e}"},
+        )
+
     if not settle_success:
         return create_x402_response(
             payment_service, settle_error or "Payment settlement failed"
