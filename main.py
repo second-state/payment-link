@@ -198,11 +198,12 @@ async def get_payment_status(payment_id: str) -> JSONResponse:
             content={"error": "Payment not found"},
         )
 
+    is_paid = payment_record["status"] == "paid"
     return JSONResponse(
         content={
             "payment_id": payment_id,
             "amount": payment_record["amount"],
-            "status": payment_record["status"],
+            "paid": is_paid,
             "tx": payment_record["tx_hash"],
         }
     )

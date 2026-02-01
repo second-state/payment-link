@@ -176,14 +176,14 @@ curl -s "http://localhost:8080/status/$PAYMENT_ID" | jq
 {
   "payment_id": "<uuid>",
   "amount": 0.05,
-  "status": "pending",
+  "paid": false,
   "tx": null
 }
 ```
 
 **Pass Criteria:**
 - Status code 200
-- `status` is `"pending"`
+- `paid` is `false`
 - `tx` is `null`
 
 ---

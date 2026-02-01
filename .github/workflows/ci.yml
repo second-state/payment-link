@@ -94,7 +94,7 @@ jobs:
         run: |
           RESPONSE=$(curl -s "http://localhost:8080/status/${{ env.PAYMENT_ID }}")
           echo "$RESPONSE"
-          echo "$RESPONSE" | jq -e '.status == "pending"' > /dev/null
+          echo "$RESPONSE" | jq -e '.paid == false' > /dev/null
           echo "$RESPONSE" | jq -e '.tx == null' > /dev/null
 
       - name: "Test 6: Status Not Found"

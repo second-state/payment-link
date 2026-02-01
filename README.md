@@ -160,7 +160,7 @@ curl "http://localhost:8000/status/550e8400-e29b-41d4-a716-446655440000"
 {
   "payment_id": "550e8400-e29b-41d4-a716-446655440000",
   "amount": 0.01,
-  "status": "pending",
+  "paid": false,
   "tx": null
 }
 ```
@@ -170,7 +170,7 @@ curl "http://localhost:8000/status/550e8400-e29b-41d4-a716-446655440000"
 {
   "payment_id": "550e8400-e29b-41d4-a716-446655440000",
   "amount": 0.01,
-  "status": "paid",
+  "paid": true,
   "tx": "0x1234567890abcdef..."
 }
 ```

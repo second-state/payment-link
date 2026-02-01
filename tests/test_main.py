@@ -98,5 +98,5 @@ def test_status_after_create(client: TestClient) -> None:
     data = status_response.json()
     assert data["payment_id"] == payment_id
     assert data["amount"] == 5.0
-    assert data["status"] == "pending"
+    assert data["paid"] is False
     assert data["tx"] is None
