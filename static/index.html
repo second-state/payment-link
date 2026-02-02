@@ -352,11 +352,14 @@
                 const paymentHeader = btoa(JSON.stringify(paymentPayload));
 
                 console.log('Payment payload:', paymentPayload);
-                console.log('X-Payment header:', paymentHeader);
+                console.log('X-Payment header length:', paymentHeader.length);
+                console.log('X-Payment header (first 100 chars):', paymentHeader.substring(0, 100));
+                console.log('Submitting to URL:', paymentUrl);
 
                 showResult('pay-result', 'info', 'Submitting payment...');
 
                 // Step 3: Submit payment with X-Payment header
+                console.log('About to fetch with X-Payment header...');
                 const payResponse = await fetch(paymentUrl, {
                     method: 'GET',
                     headers: {

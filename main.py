@@ -192,11 +192,20 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Create payment service for x402 verification
+    # Debug: log received headers
+    headers_dict = dict(request.headers)
+    print(f"DEBUG: Received headers: {headers_dict}")
+    print(f"DEBUG: X-Payment header present: {'x-payment' in headers_dict}")
+    if "x-payment" in headers_dict:
+        print(
+            f"DEBUG: X-Payment value length: {len(headers_dict.get('x-payment', ''))}"
+        )
+
     try:
         payment_service: PaymentServiceType = PaymentService(
             app_name=settings.app_name,
             app_logo=settings.app_logo,
-            headers=dict(request.headers),
+            headers=headers_dict,
             resource_url=str(request.url),
             price=payment_record["amount"],
             description=f"Payment for order {payment_id}",
