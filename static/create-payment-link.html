@@ -76,40 +76,64 @@
         .hidden {
             display: none;
         }
-        .link-box {
-            background: #f5f5f5;
-            padding: 12px;
-            border-radius: 4px;
-            margin: 8px 0;
-            word-break: break-all;
+        .result-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
         }
-        .link-box a {
-            color: #0066cc;
+        .link-group {
+            margin-bottom: 16px;
         }
         .link-label {
             font-size: 12px;
             color: #666;
             text-transform: uppercase;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+        .link-box {
+            position: relative;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px 40px 12px 12px;
+            word-break: break-all;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .link-box a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .link-box a:hover {
+            text-decoration: underline;
         }
         .copy-btn {
-            background: #666;
-            color: white;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
             border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            padding: 4px;
             cursor: pointer;
-            margin-left: 8px;
-            width: auto;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
         }
         .copy-btn:hover {
-            background: #555;
+            background: #e9ecef;
         }
-        .result-section {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid #eee;
+        .copy-btn svg {
+            width: 16px;
+            height: 16px;
+            color: #666;
+        }
+        .copy-btn.copied svg {
+            color: #2e7d32;
         }
     </style>
 </head>
@@ -130,25 +154,47 @@
         <div id="links-section" class="result-section hidden">
             <h3>Payment Links</h3>
 
-            <div class="link-label">API Payment Link (for x402 clients)</div>
-            <div class="link-box">
-                <a id="api-link" href="#" target="_blank"></a>
-                <button class="copy-btn" onclick="copyToClipboard('api-link')">Copy</button>
+            <div class="link-group">
+                <div class="link-label">API Payment Link (for x402 clients)</div>
+                <div class="link-box">
+                    <a id="api-link" href="#" target="_blank"></a>
+                    <button class="copy-btn" onclick="copyToClipboard('api-link', this)" title="Copy to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
-            <div class="link-label">Browser Payment Link (for wallet users)</div>
-            <div class="link-box">
-                <a id="browser-link" href="#" target="_blank"></a>
-                <button class="copy-btn" onclick="copyToClipboard('browser-link')">Copy</button>
+            <div class="link-group">
+                <div class="link-label">Browser Payment Link (for wallet users)</div>
+                <div class="link-box">
+                    <a id="browser-link" href="#" target="_blank"></a>
+                    <button class="copy-btn" onclick="copyToClipboard('browser-link', this)" title="Copy to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
-            <div class="link-label">Status Check Link</div>
-            <div class="link-box">
-                <a id="status-link" href="#" target="_blank"></a>
-                <button class="copy-btn" onclick="copyToClipboard('status-link')">Copy</button>
+            <div class="link-group">
+                <div class="link-label">Status Check Link</div>
+                <div class="link-box">
+                    <a id="status-link" href="#" target="_blank"></a>
+                    <button class="copy-btn" onclick="copyToClipboard('status-link', this)" title="Copy to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
+
+    <p style="text-align: center; margin-top: 20px;">
+        <a href="/" style="color: #0066cc;">Go to payment page</a>
+    </p>
 
     <script>
         async function createPaymentLink() {
@@ -215,15 +261,23 @@
             element.classList.remove('hidden');
         }
 
-        function copyToClipboard(elementId) {
+        function copyToClipboard(elementId, btn) {
             const text = document.getElementById(elementId).textContent;
             navigator.clipboard.writeText(text).then(() => {
-                // Brief visual feedback
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
+                // Show checkmark icon briefly
+                btn.classList.add('copied');
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                `;
                 setTimeout(() => {
-                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                    btn.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    `;
                 }, 1500);
             }).catch(err => {
                 console.error('Failed to copy:', err);
