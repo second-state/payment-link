@@ -207,7 +207,9 @@
 
                 // Step 1: Fetch payment requirements
                 const response = await fetch(paymentUrl);
+                console.log('Initial fetch status:', response.status);
 
+                // Handle different response statuses
                 if (response.status === 200) {
                     const data = await response.json();
                     if (data.status === 'paid') {
@@ -217,6 +219,9 @@
                         );
                         return;
                     }
+                    // If 200 but not paid, something unexpected
+                    showResult('pay-result', 'error', `Unexpected response: ${JSON.stringify(data)}`);
+                    return;
                 }
 
                 if (response.status !== 402) {
@@ -225,6 +230,7 @@
                     return;
                 }
 
+                // Parse 402 response for payment requirements
                 const paymentReq = await response.json();
                 console.log('Payment requirements:', paymentReq);
 
@@ -336,14 +342,22 @@
                 // Base64 encode the payload
                 const paymentHeader = btoa(JSON.stringify(paymentPayload));
 
+                console.log('Payment payload:', paymentPayload);
+                console.log('X-Payment header:', paymentHeader);
+
                 showResult('pay-result', 'info', 'Submitting payment...');
 
-                // Step 3: Submit payment
+                // Step 3: Submit payment with X-Payment header
                 const payResponse = await fetch(paymentUrl, {
+                    method: 'GET',
                     headers: {
-                        'X-Payment': paymentHeader
+                        'X-Payment': paymentHeader,
+                        'Accept': 'application/json'
                     }
                 });
+
+                console.log('Payment response status:', payResponse.status);
+                console.log('Payment response headers:', [...payResponse.headers.entries()]);
 
                 const payResult = await payResponse.json();
                 console.log('Payment result:', payResult);
