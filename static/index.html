@@ -95,6 +95,13 @@
         .connected {
             color: #2e7d32 !important;
         }
+        button.connected {
+            background: #2e7d32;
+            color: white;
+        }
+        button.connected:hover {
+            background: #1b5e20;
+        }
         pre {
             background: #f5f5f5;
             padding: 12px;
@@ -175,7 +182,9 @@
                 document.getElementById('wallet-status').innerHTML =
                     `Wallet: <span class="connected">${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</span> (Chain ID: ${network.chainId})`;
                 document.getElementById('pay-btn').disabled = false;
-                document.getElementById('connect-btn').textContent = 'Connected';
+                const connectBtn = document.getElementById('connect-btn');
+                connectBtn.textContent = 'Connected';
+                connectBtn.classList.add('connected');
 
                 showResult('pay-result', 'success', `Connected: ${userAddress}`);
             } catch (error) {
