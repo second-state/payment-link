@@ -265,18 +265,39 @@
                         `Please switch to ${network} (Chain ID: ${expectedChainId}). Current: ${currentNetwork.chainId}`
                     );
 
+                    const chainIdHex = '0x' + expectedChainId.toString(16);
+
                     try {
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: '0x' + expectedChainId.toString(16) }],
+                            params: [{ chainId: chainIdHex }],
                         });
-                        // Reconnect after switch
-                        provider = new ethers.BrowserProvider(window.ethereum);
-                        signer = await provider.getSigner();
                     } catch (switchError) {
-                        showResult('pay-result', 'error', `Failed to switch network: ${switchError.message}`);
-                        return;
+                        // Error code 4902 means chain not added to MetaMask
+                        if (switchError.code === 4902) {
+                            try {
+                                const chainConfig = getChainConfig(expectedChainId);
+                                if (!chainConfig) {
+                                    showResult('pay-result', 'error', `Unknown chain ID: ${expectedChainId}`);
+                                    return;
+                                }
+                                await window.ethereum.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [chainConfig],
+                                });
+                            } catch (addError) {
+                                showResult('pay-result', 'error', `Failed to add network: ${addError.message}`);
+                                return;
+                            }
+                        } else {
+                            showResult('pay-result', 'error', `Failed to switch network: ${switchError.message}`);
+                            return;
+                        }
                     }
+
+                    // Reconnect after switch
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    signer = await provider.getSigner();
                 }
 
                 showResult('pay-result', 'info', 'Preparing payment signature...');
@@ -444,6 +465,45 @@
             element.className = `status ${type}`;
             element.innerHTML = message;
             element.classList.remove('hidden');
+        }
+
+        // Chain configurations for wallet_addEthereumChain
+        function getChainConfig(chainId) {
+            const chains = {
+                // Base Mainnet
+                8453: {
+                    chainId: '0x2105',
+                    chainName: 'Base',
+                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    rpcUrls: ['https://mainnet.base.org'],
+                    blockExplorerUrls: ['https://basescan.org']
+                },
+                // Base Sepolia
+                84532: {
+                    chainId: '0x14a34',
+                    chainName: 'Base Sepolia',
+                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    rpcUrls: ['https://sepolia.base.org'],
+                    blockExplorerUrls: ['https://sepolia.basescan.org']
+                },
+                // Ethereum Mainnet
+                1: {
+                    chainId: '0x1',
+                    chainName: 'Ethereum',
+                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    rpcUrls: ['https://eth.llamarpc.com'],
+                    blockExplorerUrls: ['https://etherscan.io']
+                },
+                // Ethereum Sepolia
+                11155111: {
+                    chainId: '0xaa36a7',
+                    chainName: 'Sepolia',
+                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    rpcUrls: ['https://rpc.sepolia.org'],
+                    blockExplorerUrls: ['https://sepolia.etherscan.io']
+                }
+            };
+            return chains[chainId] || null;
         }
 
         // Helper function to normalize payment input to full URL
