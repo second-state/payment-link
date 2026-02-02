@@ -201,6 +201,10 @@ async def pay(payment_id: str, request: Request) -> Response:
             f"DEBUG: X-Payment value length: {len(headers_dict.get('x-payment', ''))}"
         )
 
+    # Normalize header case - x402 library may expect 'X-Payment' not 'x-payment'
+    if "x-payment" in headers_dict and "X-Payment" not in headers_dict:
+        headers_dict["X-Payment"] = headers_dict["x-payment"]
+
     try:
         payment_service: PaymentServiceType = PaymentService(
             app_name=settings.app_name,
