@@ -1,5 +1,6 @@
 """Payment Link Service - A web app for creating x402-protected payment links."""
 
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -40,8 +41,6 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch all unhandled exceptions and return a JSON error response."""
-    import traceback
-
     return JSONResponse(
         status_code=500,
         content={
@@ -69,6 +68,36 @@ async def root() -> Response:
             "status": "running",
         }
     )
+
+
+@app.get("/create")
+async def create_page() -> Response:
+    """Serve the create payment link page."""
+    create_path = STATIC_DIR / "create-payment-link.html"
+    if create_path.exists():
+        return FileResponse(create_path)
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Page not found"},
+    )
+
+
+@app.get("/config")
+async def get_config() -> dict[str, str | int]:
+    """Return client configuration for the frontend.
+
+    Returns:
+        JSON with network, token, and chain configuration.
+    """
+    return {
+        "network": settings.network,
+        "tokenAddress": settings.token_address,
+        "tokenName": settings.token_name,
+        "tokenSymbol": settings.token_symbol,
+        "tokenDecimals": settings.token_decimals,
+        "chainId": settings.chain_id,
+        "explorerUrl": settings.explorer_url,
+    }
 
 
 @app.get("/create-payment-link")
@@ -162,11 +191,17 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Create payment service for x402 verification
+    headers_dict = dict(request.headers)
+
+    # Normalize header case - x402 library expects 'X-Payment' not 'x-payment'
+    if "x-payment" in headers_dict and "X-Payment" not in headers_dict:
+        headers_dict["X-Payment"] = headers_dict["x-payment"]
+
     try:
         payment_service: PaymentServiceType = PaymentService(
             app_name=settings.app_name,
             app_logo=settings.app_logo,
-            headers=dict(request.headers),
+            headers=headers_dict,
             resource_url=str(request.url),
             price=payment_record["amount"],
             description=f"Payment for order {payment_id}",
@@ -214,6 +249,19 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Step 3: Settle payment
+    # Patch httpx timeout - the x402 library doesn't set a timeout for settle(),
+    # but blockchain transactions can take longer than the default 5 seconds
+    import httpx
+
+    original_init = httpx.AsyncClient.__init__
+
+    def patched_init(self: httpx.AsyncClient, *args: object, **kwargs: object) -> None:
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 60.0  # 60 seconds for blockchain transactions
+        original_init(self, *args, **kwargs)
+
+    httpx.AsyncClient.__init__ = patched_init  # type: ignore[method-assign]
+
     try:
         (
             settle_success,
@@ -226,6 +274,8 @@ async def pay(payment_id: str, request: Request) -> Response:
             status_code=500,
             content={"error": f"Failed to settle payment: {e}"},
         )
+    finally:
+        httpx.AsyncClient.__init__ = original_init  # type: ignore[method-assign]
 
     if not settle_success:
         return create_x402_response(

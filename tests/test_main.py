@@ -36,6 +36,24 @@ def test_root_endpoint(client: TestClient) -> None:
     assert "Payment Link Service" in response.text
 
 
+def test_config_endpoint(client: TestClient) -> None:
+    """Test the config endpoint returns token and chain configuration."""
+    response = client.get("/config")
+    assert response.status_code == 200
+    data = response.json()
+    # Check required fields are present
+    assert "network" in data
+    assert "tokenAddress" in data
+    assert "tokenName" in data
+    assert "tokenSymbol" in data
+    assert "tokenDecimals" in data
+    assert "chainId" in data
+    assert "explorerUrl" in data
+    # Check types
+    assert isinstance(data["tokenDecimals"], int)
+    assert isinstance(data["chainId"], int)
+
+
 TEST_RECEIVER = "0x1234567890abcdef1234567890abcdef12345678"
 
 
