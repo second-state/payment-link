@@ -1,5 +1,6 @@
 """Payment Link Service - A web app for creating x402-protected payment links."""
 
+import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -40,8 +41,6 @@ app = FastAPI(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch all unhandled exceptions and return a JSON error response."""
-    import traceback
-
     return JSONResponse(
         status_code=500,
         content={
@@ -192,16 +191,9 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Create payment service for x402 verification
-    # Debug: log received headers
     headers_dict = dict(request.headers)
-    print(f"DEBUG: Received headers: {headers_dict}")
-    print(f"DEBUG: X-Payment header present: {'x-payment' in headers_dict}")
-    if "x-payment" in headers_dict:
-        print(
-            f"DEBUG: X-Payment value length: {len(headers_dict.get('x-payment', ''))}"
-        )
 
-    # Normalize header case - x402 library may expect 'X-Payment' not 'x-payment'
+    # Normalize header case - x402 library expects 'X-Payment' not 'x-payment'
     if "x-payment" in headers_dict and "X-Payment" not in headers_dict:
         headers_dict["X-Payment"] = headers_dict["x-payment"]
 
@@ -257,6 +249,19 @@ async def pay(payment_id: str, request: Request) -> Response:
         )
 
     # Step 3: Settle payment
+    # Patch httpx timeout - the x402 library doesn't set a timeout for settle(),
+    # but blockchain transactions can take longer than the default 5 seconds
+    import httpx
+
+    original_init = httpx.AsyncClient.__init__
+
+    def patched_init(self: httpx.AsyncClient, *args: object, **kwargs: object) -> None:
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 60.0  # 60 seconds for blockchain transactions
+        original_init(self, *args, **kwargs)
+
+    httpx.AsyncClient.__init__ = patched_init  # type: ignore[method-assign]
+
     try:
         (
             settle_success,
@@ -269,6 +274,8 @@ async def pay(payment_id: str, request: Request) -> Response:
             status_code=500,
             content={"error": f"Failed to settle payment: {e}"},
         )
+    finally:
+        httpx.AsyncClient.__init__ = original_init  # type: ignore[method-assign]
 
     if not settle_success:
         return create_x402_response(
