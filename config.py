@@ -28,6 +28,7 @@ class Settings:
         self.max_timeout_seconds: int = int(os.getenv("MAX_TIMEOUT_SECONDS", "60"))
 
         # Token settings
+        self.token_id: str = os.getenv("TOKEN_ID", "usdc")
         self.token_address: str = os.getenv(
             "TOKEN_ADDRESS", "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
         )

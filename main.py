@@ -209,6 +209,7 @@ async def pay(payment_id: str, request: Request) -> Response:
             pay_to_address=payment_record["receiver"],
             facilitator_url=settings.facilitator_url,
             max_timeout_seconds=settings.max_timeout_seconds,
+            eip3009_token=settings.token_id,
         )
     except Exception as e:
         return JSONResponse(
