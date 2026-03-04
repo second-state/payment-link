@@ -13,28 +13,40 @@ async def init_db() -> None:
                 payment_id TEXT PRIMARY KEY,
                 amount REAL NOT NULL,
                 receiver TEXT NOT NULL,
+                token_id TEXT NOT NULL DEFAULT 'usdc',
                 status TEXT NOT NULL DEFAULT 'pending',
                 tx_hash TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Migration: add token_id column if missing (for existing databases)
+        cursor = await db.execute("PRAGMA table_info(payments)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "token_id" not in columns:
+            await db.execute(
+                "ALTER TABLE payments ADD COLUMN token_id TEXT NOT NULL DEFAULT 'usdc'"
+            )
         await db.commit()
 
 
-async def create_payment(payment_id: str, amount: float, receiver: str) -> None:
+async def create_payment(
+    payment_id: str, amount: float, receiver: str, token_id: str = "usdc"
+) -> None:
     """Create a new payment record.
 
     Args:
         payment_id: Unique identifier for the payment.
-        amount: Payment amount in USD.
+        amount: Payment amount.
         receiver: Blockchain address to receive the payment.
+        token_id: Token identifier (e.g. "usdc", "kii").
     """
     async with aiosqlite.connect(settings.database_path) as db:
         await db.execute(
-            "INSERT INTO payments (payment_id, amount, receiver, status) "
-            "VALUES (?, ?, ?, ?)",
-            (payment_id, amount, receiver, "pending"),
+            "INSERT INTO payments "
+            "(payment_id, amount, receiver, token_id, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (payment_id, amount, receiver, token_id, "pending"),
         )
         await db.commit()
 

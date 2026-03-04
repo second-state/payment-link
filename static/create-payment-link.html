@@ -31,13 +31,14 @@
             font-weight: 600;
             color: #555;
         }
-        input[type="text"], input[type="number"] {
+        input[type="text"], input[type="number"], select {
             width: 100%;
             padding: 12px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 16px;
             margin-bottom: 16px;
+            background: white;
         }
         button {
             background: #0066cc;
@@ -144,8 +145,13 @@
         <label for="receiver">Receiver Address</label>
         <input type="text" id="receiver" placeholder="0x1234567890abcdef1234567890abcdef12345678">
 
-        <label for="amount">Amount (USD)</label>
+        <label for="amount">Amount</label>
         <input type="number" id="amount" placeholder="0.01" step="0.01" min="0.01" value="0.01">
+
+        <label for="token">Token</label>
+        <select id="token">
+            <option value="">Loading tokens...</option>
+        </select>
 
         <button id="create-btn" onclick="createPaymentLink()">Create Payment Link</button>
 
@@ -197,9 +203,35 @@
     </p>
 
     <script>
+        // Load available tokens from server config
+        async function loadTokens() {
+            try {
+                const response = await fetch('/config');
+                if (!response.ok) return;
+                const config = await response.json();
+                const select = document.getElementById('token');
+                select.innerHTML = '';
+                if (config.tokens && config.tokens.length > 0) {
+                    config.tokens.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.id;
+                        opt.textContent = `${t.symbol} - ${t.name}`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No tokens available</option>';
+                }
+            } catch (e) {
+                console.error('Failed to load tokens:', e);
+            }
+        }
+
+        window.addEventListener('load', loadTokens);
+
         async function createPaymentLink() {
             const receiver = document.getElementById('receiver').value;
             const amount = document.getElementById('amount').value;
+            const token = document.getElementById('token').value;
 
             if (!receiver || !receiver.startsWith('0x') || receiver.length !== 42) {
                 showResult('error', 'Please enter a valid receiver address (0x...)');
@@ -211,11 +243,16 @@
                 return;
             }
 
+            if (!token) {
+                showResult('error', 'Please select a token');
+                return;
+            }
+
             try {
                 document.getElementById('create-btn').disabled = true;
                 showResult('info', 'Creating payment link...');
 
-                const response = await fetch(`/create-payment-link?amount=${amount}&receiver=${receiver}`);
+                const response = await fetch(`/create-payment-link?amount=${amount}&receiver=${receiver}&token=${token}`);
                 const data = await response.json();
 
                 if (response.ok) {

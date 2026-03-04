@@ -16,7 +16,7 @@ COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
-COPY main.py config.py database.py ./
+COPY main.py config.py database.py tokens.yaml ./
 COPY static/ ./static/
 
 # Expose port
