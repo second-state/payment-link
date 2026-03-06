@@ -37,20 +37,26 @@ def test_root_endpoint(client: TestClient) -> None:
 
 
 def test_config_endpoint(client: TestClient) -> None:
-    """Test the config endpoint returns token and chain configuration."""
+    """Test the config endpoint returns tokens and chain configuration."""
     response = client.get("/config")
     assert response.status_code == 200
     data = response.json()
     # Check required fields are present
     assert "network" in data
-    assert "tokenAddress" in data
-    assert "tokenName" in data
-    assert "tokenSymbol" in data
-    assert "tokenDecimals" in data
     assert "chainId" in data
     assert "explorerUrl" in data
-    # Check types
-    assert isinstance(data["tokenDecimals"], int)
+    assert "tokens" in data
+    # Tokens should be a list with at least one entry
+    assert isinstance(data["tokens"], list)
+    assert len(data["tokens"]) > 0
+    # Each token should have required fields
+    token = data["tokens"][0]
+    assert "id" in token
+    assert "symbol" in token
+    assert "name" in token
+    assert "decimals" in token
+    assert "address" in token
+    assert isinstance(token["decimals"], int)
     assert isinstance(data["chainId"], int)
 
 
@@ -66,6 +72,27 @@ def test_create_payment_link(client: TestClient) -> None:
     assert "payment_url" in data
     assert float(data["amount"]) == 10.50
     assert data["receiver"] == TEST_RECEIVER
+    assert data["token"] == "usdc"
+
+
+def test_create_payment_link_with_token(client: TestClient) -> None:
+    """Test creating a payment link with explicit token selection."""
+    response = client.get(
+        f"/create-payment-link?amount=5.00&receiver={TEST_RECEIVER}&token=kii"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["token"] == "kii"
+
+
+def test_create_payment_link_invalid_token(client: TestClient) -> None:
+    """Test creating a payment link with invalid token returns 400."""
+    response = client.get(
+        f"/create-payment-link?amount=1.00&receiver={TEST_RECEIVER}&token=invalid"
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "error" in data
 
 
 def test_create_payment_link_invalid_amount(client: TestClient) -> None:

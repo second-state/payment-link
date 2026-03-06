@@ -4,13 +4,13 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import settings
+from config import get_available_tokens, get_token_by_id, settings
 from database import create_payment, get_payment, init_db, update_payment_status
 
 # Static files directory
@@ -83,47 +83,62 @@ async def create_page() -> Response:
 
 
 @app.get("/config")
-async def get_config() -> dict[str, str | int]:
+async def get_config() -> dict[str, Any]:
     """Return client configuration for the frontend.
 
     Returns:
-        JSON with network, token, and chain configuration.
+        JSON with network, tokens list, and chain configuration.
     """
+    tokens = get_available_tokens(settings.network)
     return {
         "network": settings.network,
-        "tokenAddress": settings.token_address,
-        "tokenName": settings.token_name,
-        "tokenSymbol": settings.token_symbol,
-        "tokenDecimals": settings.token_decimals,
         "chainId": settings.chain_id,
         "explorerUrl": settings.explorer_url,
+        "tokens": tokens,
     }
 
 
 @app.get("/create-payment-link")
 async def create_payment_link(
-    amount: float = Query(..., gt=0, description="Payment amount in USD"),
+    amount: float = Query(..., gt=0, description="Payment amount"),
     receiver: str = Query(..., description="Blockchain address to receive payment"),
-) -> dict[str, str]:
+    token: str = Query("usdc", description="Token ID (e.g. usdc, kii)"),
+) -> Response:
     """Create a new payment link with a unique ID.
 
     Args:
-        amount: Payment amount in USD (must be greater than 0).
+        amount: Payment amount (must be greater than 0).
         receiver: Blockchain address to receive the payment.
+        token: Token identifier to use for payment.
 
     Returns:
         JSON with the payment link URL.
     """
+    # Validate token exists on current network
+    token_info = get_token_by_id(token, settings.network)
+    if not token_info:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": (
+                    f"Token '{token}' not available on network '{settings.network}'"
+                )
+            },
+        )
+
     payment_id = str(uuid.uuid4())
-    await create_payment(payment_id, amount, receiver)
+    await create_payment(payment_id, amount, receiver, token_id=token)
 
     payment_url = f"{settings.app_base_url}/pay/{payment_id}"
-    return {
-        "payment_id": payment_id,
-        "payment_url": payment_url,
-        "amount": str(amount),
-        "receiver": receiver,
-    }
+    return JSONResponse(
+        content={
+            "payment_id": payment_id,
+            "payment_url": payment_url,
+            "amount": str(amount),
+            "receiver": receiver,
+            "token": token,
+        }
+    )
 
 
 def create_x402_response(payment_service: "PaymentServiceType", error: str) -> Response:
@@ -209,6 +224,7 @@ async def pay(payment_id: str, request: Request) -> Response:
             pay_to_address=payment_record["receiver"],
             facilitator_url=settings.facilitator_url,
             max_timeout_seconds=settings.max_timeout_seconds,
+            eip3009_token=payment_record["token_id"],
         )
     except Exception as e:
         return JSONResponse(
