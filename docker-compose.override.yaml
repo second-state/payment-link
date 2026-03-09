@@ -1,0 +1,6 @@
+services:
+  payment-link:
+    volumes:
+      - ../x402-payment-service:/app/x402-payment-service
+    command: >
+      sh -c "uv pip install -e /app/x402-payment-service && uv run --no-sync uvicorn main:app --host 0.0.0.0 --port 8000"
