@@ -33,7 +33,7 @@ pythonVersion = "3.10"
 typeCheckingMode = "basic"
 
 [tool.uv.sources]
-x402-payment-service = { git = "https://github.com/second-state/x402-payment-service.git" }
+x402-payment-service = { git = "https://github.com/second-state/x402-payment-service.git", rev = "349bf922f2ac0badffaca423a4721fdb595ea7f7" }
 
 [dependency-groups]
 dev = [
