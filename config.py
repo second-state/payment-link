@@ -12,11 +12,13 @@ load_dotenv()
 # Path to tokens.yaml, relative to this file
 TOKENS_YAML_PATH = Path(__file__).parent / "tokens.yaml"
 
+
 def _load_yaml(path: Path | None = None) -> dict[str, Any]:
     """Load and parse tokens.yaml."""
     yaml_path = path or TOKENS_YAML_PATH
     with open(yaml_path) as f:
         return yaml.safe_load(f)  # type: ignore[no-any-return]
+
 
 def _validate_tokens(tokens: dict[str, Any]) -> dict[str, Any]:
     """Raise ValueError if any token is missing required fields."""
@@ -26,6 +28,7 @@ def _validate_tokens(tokens: dict[str, Any]) -> dict[str, Any]:
         if missing:
             raise ValueError(f"Token '{token_id}' missing required fields: {missing}")
     return tokens
+
 
 def _validate_networks(networks: dict[str, Any]) -> dict[str, Any]:
     """Raise ValueError if any network is missing required fields."""
@@ -38,6 +41,7 @@ def _validate_networks(networks: dict[str, Any]) -> dict[str, Any]:
             )
     return networks
 
+
 def load_config(path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load and validate token and network definitions from tokens.yaml."""
     data = _load_yaml(path)
@@ -45,9 +49,16 @@ def load_config(path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any
     networks = _validate_networks(data.get("networks", {}))
     return tokens, networks
 
+
 _tokens_config: dict[str, Any]
 _networks_config: dict[str, Any]
 _tokens_config, _networks_config = load_config()
+
+
+def _addr(entry: str | dict[str, Any]) -> str:
+    """Extract the address string from an address entry (plain str or dict)."""
+    return entry if isinstance(entry, str) else entry["address"]
+
 
 def get_network_config(network: str) -> dict[str, Any] | None:
     """Return config for a network, or None if not found."""
@@ -60,6 +71,7 @@ def get_network_config(network: str) -> dict[str, Any] | None:
         "explorer_url": net_def["explorer_url"],
         "facilitator_url": net_def["facilitator_url"],
     }
+
 
 def get_all_networks() -> list[dict[str, Any]]:
     """Return all networks with their available tokens."""
@@ -77,6 +89,7 @@ def get_all_networks() -> list[dict[str, Any]]:
         )
     return result
 
+
 def get_available_tokens(network: str) -> list[dict[str, Any]]:
     """Return tokens available on the given network."""
     result = []
@@ -89,10 +102,11 @@ def get_available_tokens(network: str) -> list[dict[str, Any]]:
                     "symbol": token_def["symbol"],
                     "name": token_def["name"],
                     "decimals": token_def["decimals"],
-                    "address": addresses[network],
+                    "address": _addr(addresses[network]),
                 }
             )
     return result
+
 
 def get_token_by_id(token_id: str, network: str) -> dict[str, Any] | None:
     """Look up a token by ID on a specific network."""
@@ -107,8 +121,19 @@ def get_token_by_id(token_id: str, network: str) -> dict[str, Any] | None:
         "symbol": token_def["symbol"],
         "name": token_def["name"],
         "decimals": token_def["decimals"],
-        "address": addresses[network],
+        "address": _addr(addresses[network]),
     }
+
+
+def get_eip3009_name_overrides() -> dict[str, dict[str, str]]:
+    """Return per-network EIP-712 contract name overrides from tokens.yaml."""
+    overrides: dict[str, dict[str, str]] = {}
+    for token_id, token_def in _tokens_config.items():
+        for network, entry in token_def.get("addresses", {}).items():
+            if isinstance(entry, dict) and "name" in entry:
+                overrides.setdefault(token_id, {})[network] = entry["name"]
+    return overrides
+
 
 class Settings:
     """Application settings loaded from environment variables."""
@@ -132,5 +157,6 @@ class Settings:
 
         # Database settings
         self.database_path: str = os.getenv("DATABASE_PATH", "payments.db")
+
 
 settings = Settings()

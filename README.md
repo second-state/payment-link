@@ -61,11 +61,15 @@ tokens:
     name: USD Coin
     decimals: 6
     addresses:
-      base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-      base-sepolia: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+      base:
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        name: "USD Coin"
+      base-sepolia:
+        address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+        name: "USDC"
 ```
 
-Tokens without an address on a given network are automatically excluded from that network's token list.
+Each address entry includes an `address` and a `name` (the on-chain EIP-712 contract name used for signing). Tokens without an address on a given network are automatically excluded from that network's token list.
 
 ## Environment Variables
 

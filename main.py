@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import (
     get_all_networks,
+    get_eip3009_name_overrides,
     get_network_config,
     get_token_by_id,
     settings,
@@ -26,6 +27,17 @@ if TYPE_CHECKING:
 
 try:
     from x402_payment_service import PaymentService
+    from x402_payment_service.payment_service import EIP3009_TOKENS
+
+    # Sync per-network EIP-712 contract names from tokens.yaml into the
+    # library's hardcoded EIP3009_TOKENS.  This fixes cases where the
+    # on-chain name() differs from the library default (e.g. base-sepolia
+    # USDC returns "USDC" but the library assumes "USD Coin").
+    for _tok, _networks in get_eip3009_name_overrides().items():
+        if _tok in EIP3009_TOKENS:
+            for _net, _name in _networks.items():
+                if _net in EIP3009_TOKENS[_tok]:
+                    EIP3009_TOKENS[_tok][_net]["name"] = _name
 except ImportError:
     PaymentService = None  # type: ignore[misc, assignment]
 
