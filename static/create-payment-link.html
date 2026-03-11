@@ -148,6 +148,11 @@
         <label for="amount">Amount</label>
         <input type="number" id="amount" placeholder="0.01" step="0.01" min="0.01" value="0.01">
 
+        <label for="network">Network</label>
+        <select id="network" onchange="onNetworkChange()">
+            <option value="">Loading networks...</option>
+        </select>
+
         <label for="token">Token</label>
         <select id="token">
             <option value="">Loading tokens...</option>
@@ -203,35 +208,65 @@
     </p>
 
     <script>
-        // Load available tokens from server config
-        async function loadTokens() {
+        let configData = null;
+
+        // Load networks and tokens from server config
+        async function loadConfig() {
             try {
                 const response = await fetch('/config');
                 if (!response.ok) return;
-                const config = await response.json();
-                const select = document.getElementById('token');
-                select.innerHTML = '';
-                if (config.tokens && config.tokens.length > 0) {
-                    config.tokens.forEach(t => {
+                configData = await response.json();
+
+                // Populate network dropdown
+                const networkSelect = document.getElementById('network');
+                networkSelect.innerHTML = '';
+                if (configData.networks && configData.networks.length > 0) {
+                    configData.networks.forEach(n => {
                         const opt = document.createElement('option');
-                        opt.value = t.id;
-                        opt.textContent = `${t.symbol} - ${t.name}`;
-                        select.appendChild(opt);
+                        opt.value = n.name;
+                        opt.textContent = n.name;
+                        if (n.name === configData.defaultNetwork) {
+                            opt.selected = true;
+                        }
+                        networkSelect.appendChild(opt);
                     });
+                    // Load tokens for the default network
+                    onNetworkChange();
                 } else {
-                    select.innerHTML = '<option value="">No tokens available</option>';
+                    networkSelect.innerHTML = '<option value="">No networks available</option>';
                 }
             } catch (e) {
-                console.error('Failed to load tokens:', e);
+                console.error('Failed to load config:', e);
             }
         }
 
-        window.addEventListener('load', loadTokens);
+        function onNetworkChange() {
+            const networkName = document.getElementById('network').value;
+            const tokenSelect = document.getElementById('token');
+            tokenSelect.innerHTML = '';
+
+            if (!configData || !configData.networks) return;
+
+            const net = configData.networks.find(n => n.name === networkName);
+            if (net && net.tokens && net.tokens.length > 0) {
+                net.tokens.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = `${t.symbol} - ${t.name}`;
+                    tokenSelect.appendChild(opt);
+                });
+            } else {
+                tokenSelect.innerHTML = '<option value="">No tokens available</option>';
+            }
+        }
+
+        window.addEventListener('load', loadConfig);
 
         async function createPaymentLink() {
             const receiver = document.getElementById('receiver').value;
             const amount = document.getElementById('amount').value;
             const token = document.getElementById('token').value;
+            const network = document.getElementById('network').value;
 
             if (!receiver || !receiver.startsWith('0x') || receiver.length !== 42) {
                 showResult('error', 'Please enter a valid receiver address (0x...)');
@@ -248,11 +283,16 @@
                 return;
             }
 
+            if (!network) {
+                showResult('error', 'Please select a network');
+                return;
+            }
+
             try {
                 document.getElementById('create-btn').disabled = true;
                 showResult('info', 'Creating payment link...');
 
-                const response = await fetch(`/create-payment-link?amount=${amount}&receiver=${receiver}&token=${token}`);
+                const response = await fetch(`/create-payment-link?amount=${amount}&receiver=${receiver}&token=${token}&network=${network}`);
                 const data = await response.json();
 
                 if (response.ok) {
@@ -275,7 +315,8 @@
                     showResult('success',
                         `Payment link created!<br><br>` +
                         `<strong>Payment ID:</strong> ${paymentId}<br>` +
-                        `<strong>Amount:</strong> $${data.amount} USD<br>` +
+                        `<strong>Amount:</strong> ${data.amount} ${(data.token || token).toUpperCase()}<br>` +
+                        `<strong>Network:</strong> ${data.network || network}<br>` +
                         `<strong>Receiver:</strong> ${data.receiver}`
                     );
 

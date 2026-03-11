@@ -13,19 +13,15 @@ load_dotenv()
 TOKENS_YAML_PATH = Path(__file__).parent / "tokens.yaml"
 
 
-def load_tokens_config(path: Path | None = None) -> dict[str, Any]:
-    """Load token definitions from tokens.yaml.
-
-    Args:
-        path: Optional path to tokens.yaml. Defaults to TOKENS_YAML_PATH.
-
-    Returns:
-        Dictionary of token definitions keyed by token ID.
-    """
+def _load_yaml(path: Path | None = None) -> dict[str, Any]:
+    """Load and parse tokens.yaml."""
     yaml_path = path or TOKENS_YAML_PATH
     with open(yaml_path) as f:
-        data = yaml.safe_load(f)
-    tokens = data.get("tokens", {})
+        return yaml.safe_load(f)  # type: ignore[no-any-return]
+
+
+def _validate_tokens(tokens: dict[str, Any]) -> dict[str, Any]:
+    """Raise ValueError if any token is missing required fields."""
     required_fields = {"symbol", "name", "decimals", "addresses"}
     for token_id, token_def in tokens.items():
         missing = required_fields - set(token_def)
@@ -34,22 +30,70 @@ def load_tokens_config(path: Path | None = None) -> dict[str, Any]:
     return tokens
 
 
-# Loaded once at import time (same pattern as `settings = Settings()` below)
-_tokens_config: dict[str, Any] = load_tokens_config()
+def _validate_networks(networks: dict[str, Any]) -> dict[str, Any]:
+    """Raise ValueError if any network is missing required fields."""
+    required_fields = {"chain_id", "explorer_url", "facilitator_url"}
+    for network_name, network_def in networks.items():
+        missing = required_fields - set(network_def)
+        if missing:
+            raise ValueError(
+                f"Network '{network_name}' missing required fields: {missing}"
+            )
+    return networks
+
+
+def load_config(path: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load and validate token and network definitions from tokens.yaml."""
+    data = _load_yaml(path)
+    tokens = _validate_tokens(data.get("tokens", {}))
+    networks = _validate_networks(data.get("networks", {}))
+    return tokens, networks
+
+
+_tokens_config: dict[str, Any]
+_networks_config: dict[str, Any]
+_tokens_config, _networks_config = load_config()
+
+
+def _addr(entry: str | dict[str, Any]) -> str:
+    """Extract the address string from an address entry (plain str or dict)."""
+    return entry if isinstance(entry, str) else entry["address"]
+
+
+def get_network_config(network: str) -> dict[str, Any] | None:
+    """Return config for a network, or None if not found."""
+    net_def = _networks_config.get(network)
+    if not net_def:
+        return None
+    return {
+        "name": network,
+        "chain_id": net_def["chain_id"],
+        "explorer_url": net_def["explorer_url"],
+        "facilitator_url": net_def["facilitator_url"],
+    }
+
+
+def get_all_networks() -> list[dict[str, Any]]:
+    """Return all networks with their available tokens."""
+    result: list[dict[str, Any]] = []
+    for network_name, net_def in _networks_config.items():
+        tokens = get_available_tokens(network_name)
+        result.append(
+            {
+                "name": network_name,
+                "chainId": net_def["chain_id"],
+                "explorerUrl": net_def["explorer_url"],
+                "facilitatorUrl": net_def["facilitator_url"],
+                "tokens": tokens,
+            }
+        )
+    return result
 
 
 def get_available_tokens(network: str) -> list[dict[str, Any]]:
-    """Get tokens available on the given network.
-
-    Args:
-        network: Network name (e.g. "base", "base-sepolia").
-
-    Returns:
-        List of token info dicts with id, symbol, name, decimals, address.
-    """
-    all_tokens = _tokens_config
+    """Return tokens available on the given network."""
     result = []
-    for token_id, token_def in all_tokens.items():
+    for token_id, token_def in _tokens_config.items():
         addresses = token_def.get("addresses", {})
         if network in addresses:
             result.append(
@@ -58,24 +102,15 @@ def get_available_tokens(network: str) -> list[dict[str, Any]]:
                     "symbol": token_def["symbol"],
                     "name": token_def["name"],
                     "decimals": token_def["decimals"],
-                    "address": addresses[network],
+                    "address": _addr(addresses[network]),
                 }
             )
     return result
 
 
 def get_token_by_id(token_id: str, network: str) -> dict[str, Any] | None:
-    """Look up a specific token by ID and network.
-
-    Args:
-        token_id: Token identifier (e.g. "usdc", "kii").
-        network: Network name (e.g. "base", "base-sepolia").
-
-    Returns:
-        Token info dict, or None if not found on the given network.
-    """
-    all_tokens = _tokens_config
-    token_def = all_tokens.get(token_id)
+    """Look up a token by ID on a specific network."""
+    token_def = _tokens_config.get(token_id)
     if not token_def:
         return None
     addresses = token_def.get("addresses", {})
@@ -86,15 +121,24 @@ def get_token_by_id(token_id: str, network: str) -> dict[str, Any] | None:
         "symbol": token_def["symbol"],
         "name": token_def["name"],
         "decimals": token_def["decimals"],
-        "address": addresses[network],
+        "address": _addr(addresses[network]),
     }
+
+
+def get_eip3009_name_overrides() -> dict[str, dict[str, str]]:
+    """Return per-network EIP-712 contract name overrides from tokens.yaml."""
+    overrides: dict[str, dict[str, str]] = {}
+    for token_id, token_def in _tokens_config.items():
+        for network, entry in token_def.get("addresses", {}).items():
+            if isinstance(entry, dict) and "name" in entry:
+                overrides.setdefault(token_id, {})[network] = entry["name"]
+    return overrides
 
 
 class Settings:
     """Application settings loaded from environment variables."""
 
     def __init__(self) -> None:
-        """Initialize settings from environment variables."""
         # Application settings
         self.app_name: str = os.getenv("APP_NAME", "Payment Link Service")
         self.app_logo: str = os.getenv("APP_LOGO", "/static/logo.png")
@@ -103,18 +147,13 @@ class Settings:
         self.app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
         # x402 Payment settings
-        # Valid networks: base-sepolia (testnet), base (mainnet)
-        self.network: str = os.getenv("NETWORK", "base-sepolia")
-        self.facilitator_url: str = os.getenv(
-            "FACILITATOR_URL", "https://x402f1.secondstate.io"
-        )
+        self.default_network: str = os.getenv("DEFAULT_NETWORK", "base-sepolia")
         self.max_timeout_seconds: int = int(os.getenv("MAX_TIMEOUT_SECONDS", "60"))
 
-        # Chain settings
-        self.chain_id: int = int(os.getenv("CHAIN_ID", "84532"))
-        self.explorer_url: str = os.getenv(
-            "EXPLORER_URL", "https://sepolia.basescan.org/tx/"
-        )
+        if not get_network_config(self.default_network):
+            raise ValueError(
+                f"DEFAULT_NETWORK '{self.default_network}' not found in tokens.yaml"
+            )
 
         # Database settings
         self.database_path: str = os.getenv("DATABASE_PATH", "payments.db")

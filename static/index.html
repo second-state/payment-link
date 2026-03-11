@@ -153,6 +153,12 @@
         // Server configuration (loaded from /config endpoint)
         let serverConfig = null;
 
+        // Helper: find network config by name
+        function getNetworkByName(name) {
+            if (!serverConfig || !serverConfig.networks) return null;
+            return serverConfig.networks.find(n => n.name === name);
+        }
+
         // ERC-3009 ABI for transferWithAuthorization
         const USDC_ABI = [
             "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)",
@@ -212,7 +218,7 @@
 
             try {
                 document.getElementById('pay-btn').disabled = true;
-                showResult('pay-result', 'info', 'Fetching payment requirements...');
+                showResult('pay-result', 'info', 'Fetching payment details...');
 
                 // Step 1: Fetch payment requirements
                 const response = await fetch(paymentUrl);
@@ -251,10 +257,11 @@
                 // Get the first payment requirement
                 const req = paymentReq.accepts[0];
                 const network = req.network;
-                const expectedChainId = serverConfig?.chainId;
+                const netConfig = getNetworkByName(network);
+                const expectedChainId = netConfig?.chainId;
 
                 if (!expectedChainId) {
-                    showResult('pay-result', 'error', 'Server config not loaded');
+                    showResult('pay-result', 'error', `Network config not found for '${network}'`);
                     return;
                 }
 
@@ -279,7 +286,7 @@
                     }
                 }
 
-                showResult('pay-result', 'info', 'Preparing payment signature...');
+                showResult('pay-result', 'info', `Preparing payment on <strong>${network}</strong>...`);
 
                 // Step 2: Create and sign the payment
                 const usdcAddress = req.asset;
@@ -324,7 +331,7 @@
                     nonce: nonce
                 };
 
-                showResult('pay-result', 'info', 'Please sign the transaction in your wallet...');
+                showResult('pay-result', 'info', `Please sign the transaction in your wallet... (${network})`);
 
                 // Sign the typed data
                 const signature = await signer.signTypedData(domain, types, message);
@@ -356,7 +363,7 @@
                 console.log('X-Payment header (first 100 chars):', paymentHeader.substring(0, 100));
                 console.log('Submitting to URL:', paymentUrl);
 
-                showResult('pay-result', 'info', 'Submitting payment...');
+                showResult('pay-result', 'info', `Submitting payment on <strong>${network}</strong>...`);
 
                 // Step 3: Submit payment with X-Payment header
                 console.log('About to fetch with X-Payment header...');
@@ -375,7 +382,7 @@
                 console.log('Payment result:', payResult);
 
                 if (payResponse.ok && payResult.status === 'paid') {
-                    const explorerUrl = serverConfig.explorerUrl + payResult.tx;
+                    const explorerUrl = (netConfig?.explorerUrl || '') + payResult.tx;
                     showResult('pay-result', 'success',
                         `Payment successful!<br><br>` +
                         `<strong>TX Hash:</strong><br>` +
@@ -416,17 +423,24 @@
                 const data = await response.json();
 
                 if (response.ok) {
+                    const symbol = data.tokenSymbol || 'USD';
+                    const explorerUrl = data.explorerUrl || '';
                     if (data.paid) {
+                        const txLink = explorerUrl
+                            ? `<a href="${explorerUrl}${data.tx}" target="_blank">${data.tx}</a>`
+                            : data.tx;
                         showResult('status-result', 'success',
                             `<strong>Status:</strong> Paid<br>` +
-                            `<strong>Amount:</strong> $${data.amount} USD<br>` +
+                            `<strong>Amount:</strong> ${data.amount} ${symbol}<br>` +
+                            `<strong>Network:</strong> ${data.network}<br>` +
                             `<strong>TX Hash:</strong><br>` +
-                            `<span class="tx-link">${data.tx}</span>`
+                            `<span class="tx-link">${txLink}</span>`
                         );
                     } else {
                         showResult('status-result', 'warning',
                             `<strong>Status:</strong> Pending<br>` +
-                            `<strong>Amount:</strong> $${data.amount} USD`
+                            `<strong>Amount:</strong> ${data.amount} ${symbol}<br>` +
+                            `<strong>Network:</strong> ${data.network}`
                         );
                     }
                 } else {

@@ -37,27 +37,32 @@ def test_root_endpoint(client: TestClient) -> None:
 
 
 def test_config_endpoint(client: TestClient) -> None:
-    """Test the config endpoint returns tokens and chain configuration."""
+    """Test the config endpoint returns networks and tokens configuration."""
     response = client.get("/config")
     assert response.status_code == 200
     data = response.json()
     # Check required fields are present
-    assert "network" in data
-    assert "chainId" in data
-    assert "explorerUrl" in data
-    assert "tokens" in data
-    # Tokens should be a list with at least one entry
-    assert isinstance(data["tokens"], list)
-    assert len(data["tokens"]) > 0
+    assert "defaultNetwork" in data
+    assert "networks" in data
+    assert isinstance(data["networks"], list)
+    assert len(data["networks"]) > 0
+    # Each network should have required fields
+    net = data["networks"][0]
+    assert "name" in net
+    assert "chainId" in net
+    assert "explorerUrl" in net
+    assert "facilitatorUrl" in net
+    assert "tokens" in net
+    assert isinstance(net["chainId"], int)
     # Each token should have required fields
-    token = data["tokens"][0]
+    assert len(net["tokens"]) > 0
+    token = net["tokens"][0]
     assert "id" in token
     assert "symbol" in token
     assert "name" in token
     assert "decimals" in token
     assert "address" in token
     assert isinstance(token["decimals"], int)
-    assert isinstance(data["chainId"], int)
 
 
 TEST_RECEIVER = "0x1234567890abcdef1234567890abcdef12345678"
@@ -73,6 +78,27 @@ def test_create_payment_link(client: TestClient) -> None:
     assert float(data["amount"]) == 10.50
     assert data["receiver"] == TEST_RECEIVER
     assert data["token"] == "usdc"
+    assert "network" in data
+
+
+def test_create_payment_link_with_network(client: TestClient) -> None:
+    """Test creating a payment link with explicit network selection."""
+    response = client.get(
+        f"/create-payment-link?amount=1.00&receiver={TEST_RECEIVER}&network=base"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["network"] == "base"
+
+
+def test_create_payment_link_invalid_network(client: TestClient) -> None:
+    """Test creating a payment link with invalid network returns 400."""
+    response = client.get(
+        f"/create-payment-link?amount=1.00&receiver={TEST_RECEIVER}&network=invalid"
+    )
+    assert response.status_code == 400
+    data = response.json()
+    assert "error" in data
 
 
 def test_create_payment_link_with_token(client: TestClient) -> None:
@@ -159,3 +185,58 @@ def test_status_after_create(client: TestClient) -> None:
     assert data["amount"] == 5.0
     assert data["paid"] is False
     assert data["tx"] is None
+
+
+def test_status_returns_network_and_token_fields(client: TestClient) -> None:
+    """Test that status endpoint returns network, token, and explorer fields."""
+    create_response = client.get(
+        f"/create-payment-link?amount=1.00&receiver={TEST_RECEIVER}"
+        "&token=usdc&network=base-sepolia"
+    )
+    assert create_response.status_code == 200
+    payment_id = create_response.json()["payment_id"]
+
+    status_response = client.get(f"/status/{payment_id}")
+    assert status_response.status_code == 200
+    data = status_response.json()
+    assert data["network"] == "base-sepolia"
+    assert data["token"] == "usdc"
+    assert data["tokenSymbol"] == "USDC"
+    assert data["explorerUrl"] == "https://sepolia.basescan.org/tx/"
+    assert data["receiver"] == TEST_RECEIVER
+
+
+def test_status_with_explicit_network(client: TestClient) -> None:
+    """Test that status returns the correct network when explicitly set."""
+    create_response = client.get(
+        f"/create-payment-link?amount=2.00&receiver={TEST_RECEIVER}"
+        "&token=usdc&network=base"
+    )
+    assert create_response.status_code == 200
+    payment_id = create_response.json()["payment_id"]
+
+    status_response = client.get(f"/status/{payment_id}")
+    assert status_response.status_code == 200
+    data = status_response.json()
+    assert data["network"] == "base"
+    assert data["explorerUrl"] == "https://basescan.org/tx/"
+
+
+def test_config_default_network_exists(client: TestClient) -> None:
+    """Test that the defaultNetwork in config actually exists in the networks list."""
+    response = client.get("/config")
+    assert response.status_code == 200
+    data = response.json()
+    default_net = data["defaultNetwork"]
+    network_names = [n["name"] for n in data["networks"]]
+    assert default_net in network_names
+
+
+def test_config_networks_have_tokens(client: TestClient) -> None:
+    """Test that each network in config has a tokens list."""
+    response = client.get("/config")
+    assert response.status_code == 200
+    data = response.json()
+    for net in data["networks"]:
+        assert "tokens" in net
+        assert isinstance(net["tokens"], list)
