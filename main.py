@@ -10,7 +10,12 @@ from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from config import get_available_tokens, get_token_by_id, settings
+from config import (
+    get_all_networks,
+    get_network_config,
+    get_token_by_id,
+    settings,
+)
 from database import create_payment, get_payment, init_db, update_payment_status
 
 # Static files directory
@@ -87,14 +92,12 @@ async def get_config() -> dict[str, Any]:
     """Return client configuration for the frontend.
 
     Returns:
-        JSON with network, tokens list, and chain configuration.
+        JSON with default network, all available networks with their
+        tokens and chain configuration.
     """
-    tokens = get_available_tokens(settings.network)
     return {
-        "network": settings.network,
-        "chainId": settings.chain_id,
-        "explorerUrl": settings.explorer_url,
-        "tokens": tokens,
+        "defaultNetwork": settings.default_network,
+        "networks": get_all_networks(),
     }
 
 
@@ -103,6 +106,9 @@ async def create_payment_link(
     amount: float = Query(..., gt=0, description="Payment amount"),
     receiver: str = Query(..., description="Blockchain address to receive payment"),
     token: str = Query("usdc", description="Token ID (e.g. usdc, kii)"),
+    network: str | None = Query(
+        None, description="Network name (e.g. base, base-sepolia)"
+    ),
 ) -> Response:
     """Create a new payment link with a unique ID.
 
@@ -110,24 +116,37 @@ async def create_payment_link(
         amount: Payment amount (must be greater than 0).
         receiver: Blockchain address to receive the payment.
         token: Token identifier to use for payment.
+        network: Network to use. Defaults to DEFAULT_NETWORK from env.
 
     Returns:
         JSON with the payment link URL.
     """
-    # Validate token exists on current network
-    token_info = get_token_by_id(token, settings.network)
+    selected_network = network or settings.default_network
+
+    # Validate network
+    net_cfg = get_network_config(selected_network)
+    if not net_cfg:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Unknown network '{selected_network}'"},
+        )
+
+    # Validate token exists on selected network
+    token_info = get_token_by_id(token, selected_network)
     if not token_info:
         return JSONResponse(
             status_code=400,
             content={
                 "error": (
-                    f"Token '{token}' not available on network '{settings.network}'"
+                    f"Token '{token}' not available on network '{selected_network}'"
                 )
             },
         )
 
     payment_id = str(uuid.uuid4())
-    await create_payment(payment_id, amount, receiver, token_id=token)
+    await create_payment(
+        payment_id, amount, receiver, token_id=token, network=selected_network
+    )
 
     payment_url = f"{settings.app_base_url}/pay/{payment_id}"
     return JSONResponse(
@@ -137,6 +156,7 @@ async def create_payment_link(
             "amount": str(amount),
             "receiver": receiver,
             "token": token,
+            "network": selected_network,
         }
     )
 
@@ -212,6 +232,15 @@ async def pay(payment_id: str, request: Request) -> Response:
     if "x-payment" in headers_dict and "X-Payment" not in headers_dict:
         headers_dict["X-Payment"] = headers_dict["x-payment"]
 
+    # Resolve network config from the payment record
+    payment_network = payment_record.get("network", settings.default_network)
+    net_cfg = get_network_config(payment_network)
+    if not net_cfg:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Network '{payment_network}' not found in config"},
+        )
+
     try:
         payment_service: PaymentServiceType = PaymentService(
             app_name=settings.app_name,
@@ -220,9 +249,9 @@ async def pay(payment_id: str, request: Request) -> Response:
             resource_url=str(request.url),
             price=payment_record["amount"],
             description=f"Payment for order {payment_id}",
-            network=settings.network,
+            network=payment_network,
             pay_to_address=payment_record["receiver"],
-            facilitator_url=settings.facilitator_url,
+            facilitator_url=net_cfg["facilitator_url"],
             max_timeout_seconds=settings.max_timeout_seconds,
             eip3009_token=payment_record["token_id"],
         )
@@ -328,10 +357,20 @@ async def get_payment_status(payment_id: str) -> JSONResponse:
         )
 
     is_paid = payment_record["status"] == "paid"
+    payment_network = payment_record.get("network", settings.default_network)
+    token_id = payment_record.get("token_id", "usdc")
+    net_cfg = get_network_config(payment_network)
+    token_info = get_token_by_id(token_id, payment_network)
+
     return JSONResponse(
         content={
             "payment_id": payment_id,
             "amount": payment_record["amount"],
+            "receiver": payment_record["receiver"],
+            "token": token_id,
+            "tokenSymbol": token_info["symbol"] if token_info else token_id,
+            "network": payment_network,
+            "explorerUrl": net_cfg["explorer_url"] if net_cfg else "",
             "paid": is_paid,
             "tx": payment_record["tx_hash"],
         }

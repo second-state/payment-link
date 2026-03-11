@@ -1,20 +1,15 @@
 # Payment Link Service
 
-A Python web service for creating x402-protected payment links. This service allows you to generate unique payment URLs that require cryptocurrency payments before granting access. Supports multiple ERC-3009 tokens (USDC, KII, etc.) via a configurable `tokens.yaml`.
+A Python web service for creating x402-protected payment links. This service allows you to generate unique payment URLs that require cryptocurrency payments before granting access. Supports multiple networks and ERC-3009 tokens (USDC, KII, etc.) via a configurable `tokens.yaml`.
 
 ## Quick Start with Docker
 
-1. **Configure environment and tokens:**
+1. **Configure environment:**
 
 ```bash
-# Pick a network config
-cp .env.example.base-sepolia .env      # testnet
-# cp .env.example.base-mainnet .env    # mainnet
-
-# Pick a token config
-cp tokens.yaml.usdc tokens.yaml              # USDC only
-# cp tokens.yaml.kii tokens.yaml             # KII only
-# cp tokens.yaml.multiple-token tokens.yaml  # USDC + KII
+cp .env.example .env
+# Edit .env to set DEFAULT_NETWORK (must exist in tokens.yaml)
+# Edit tokens.yaml to add/remove networks and tokens
 ```
 
 2. **Build the image:**
@@ -43,21 +38,23 @@ The `touch` command creates an empty database file, and the `-v` flag mounts it 
 curl http://localhost:8000/
 ```
 
-## Token Configuration
+## Configuration
 
-Available tokens are defined in `tokens.yaml`. Each token specifies its contract address per network; tokens without an address on the active network are automatically excluded.
-
-Example files:
-
-| File | Contents |
-|------|----------|
-| `tokens.yaml.usdc` | USDC (Base, Base Sepolia) |
-| `tokens.yaml.kii` | KII (Base, Base Sepolia) |
-| `tokens.yaml.multiple-token` | USDC + KII |
+Networks and tokens are defined in `tokens.yaml`. All networks listed are available simultaneously — each payment link is bound to a specific network at creation time.
 
 Format:
 
 ```yaml
+networks:
+  base:
+    chain_id: 8453
+    explorer_url: "https://basescan.org/tx/"
+    facilitator_url: "https://x402f1.secondstate.io"
+  base-sepolia:
+    chain_id: 84532
+    explorer_url: "https://sepolia.basescan.org/tx/"
+    facilitator_url: "https://x402f1.secondstate.io"
+
 tokens:
   usdc:
     symbol: USDC
@@ -68,18 +65,17 @@ tokens:
       base-sepolia: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 ```
 
+Tokens without an address on a given network are automatically excluded from that network's token list.
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NETWORK` | `base-sepolia` | Blockchain network (`base-sepolia` for testnet, `base` for mainnet) |
+| `DEFAULT_NETWORK` | `base-sepolia` | Default network for new payment links (must exist in `tokens.yaml`) |
 | `APP_BASE_URL` | `http://localhost:8000` | Public base URL for generated payment links |
 | `APP_NAME` | `Payment Link Service` | Service name displayed in payment UI |
 | `APP_LOGO` | `/static/logo.png` | Logo URL for payment UI |
-| `FACILITATOR_URL` | `https://x402f1.secondstate.io` | x402 facilitator service endpoint |
 | `MAX_TIMEOUT_SECONDS` | `60` | Payment timeout in seconds |
-| `CHAIN_ID` | `84532` | Chain ID for the network |
-| `EXPLORER_URL` | `https://sepolia.basescan.org/tx/` | Block explorer URL prefix |
 | `DATABASE_PATH` | `payments.db` | SQLite database file path |
 
 ## API Endpoints
@@ -94,20 +90,26 @@ Open in a browser to access the interactive payment interface.
 
 ### GET /config
 
-Returns available tokens and chain configuration for the current network.
+Returns all available networks with their tokens and chain configuration.
 
 ```json
 {
-  "network": "base-sepolia",
-  "chainId": 84532,
-  "explorerUrl": "https://sepolia.basescan.org/tx/",
-  "tokens": [
+  "defaultNetwork": "base-sepolia",
+  "networks": [
     {
-      "id": "usdc",
-      "symbol": "USDC",
-      "name": "USD Coin",
-      "decimals": 6,
-      "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+      "name": "base-sepolia",
+      "chainId": 84532,
+      "explorerUrl": "https://sepolia.basescan.org/tx/",
+      "facilitatorUrl": "https://x402f1.secondstate.io",
+      "tokens": [
+        {
+          "id": "usdc",
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "decimals": 6,
+          "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+        }
+      ]
     }
   ]
 }
@@ -126,10 +128,11 @@ Creates a new payment link with a unique ID.
 | `amount` | float | Yes | — | Payment amount (must be > 0) |
 | `receiver` | string | Yes | — | Blockchain address to receive the payment |
 | `token` | string | No | `usdc` | Token ID (e.g. `usdc`, `kii`) |
+| `network` | string | No | `DEFAULT_NETWORK` | Network name (e.g. `base`, `base-sepolia`) |
 
 **Example Request:**
 ```bash
-curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x1234567890abcdef1234567890abcdef12345678&token=usdc"
+curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x1234567890abcdef1234567890abcdef12345678&token=usdc&network=base-sepolia"
 ```
 
 **Response:**
@@ -139,7 +142,8 @@ curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x123456789
   "payment_url": "http://localhost:8000/pay/550e8400-e29b-41d4-a716-446655440000",
   "amount": "0.01",
   "receiver": "0x1234567890abcdef1234567890abcdef12345678",
-  "token": "usdc"
+  "token": "usdc",
+  "network": "base-sepolia"
 }
 ```
 
@@ -211,6 +215,11 @@ curl "http://localhost:8000/status/550e8400-e29b-41d4-a716-446655440000"
 {
   "payment_id": "550e8400-e29b-41d4-a716-446655440000",
   "amount": 0.01,
+  "receiver": "0x1234567890abcdef1234567890abcdef12345678",
+  "token": "usdc",
+  "tokenSymbol": "USDC",
+  "network": "base-sepolia",
+  "explorerUrl": "https://sepolia.basescan.org/tx/",
   "paid": false,
   "tx": null
 }
@@ -221,6 +230,11 @@ curl "http://localhost:8000/status/550e8400-e29b-41d4-a716-446655440000"
 {
   "payment_id": "550e8400-e29b-41d4-a716-446655440000",
   "amount": 0.01,
+  "receiver": "0x1234567890abcdef1234567890abcdef12345678",
+  "token": "usdc",
+  "tokenSymbol": "USDC",
+  "network": "base-sepolia",
+  "explorerUrl": "https://sepolia.basescan.org/tx/",
   "paid": true,
   "tx": "0x1234567890abcdef..."
 }
@@ -238,7 +252,7 @@ curl "http://localhost:8000/status/550e8400-e29b-41d4-a716-446655440000"
 1. **Create a payment link:**
 
 ```bash
-curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x1234567890abcdef1234567890abcdef12345678&token=usdc"
+curl "http://localhost:8000/create-payment-link?amount=0.01&receiver=0x1234567890abcdef1234567890abcdef12345678&token=usdc&network=base-sepolia"
 ```
 
 2. **Share the `payment_url` with the payer.** When they open it in a browser, they'll see a payment interface.
@@ -264,8 +278,7 @@ uv sync
 2. **Configure environment:**
 
 ```bash
-cp .env.example.base-sepolia .env
-cp tokens.yaml.multiple-token tokens.yaml
+cp .env.example .env
 ```
 
 3. **Run the server:**

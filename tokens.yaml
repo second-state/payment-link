@@ -1,3 +1,13 @@
+networks:
+  base:
+    chain_id: 8453
+    explorer_url: "https://basescan.org/tx/"
+    facilitator_url: "https://x402f1.secondstate.io"
+  base-sepolia:
+    chain_id: 84532
+    explorer_url: "https://sepolia.basescan.org/tx/"
+    facilitator_url: "https://x402f1.secondstate.io"
+
 tokens:
   usdc:
     symbol: USDC
